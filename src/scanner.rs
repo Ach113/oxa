@@ -129,42 +129,7 @@ impl Scanner {
         self.current += 1;
 
         match (c) {
-            // single char tokens
-            '(' => self.tokens.push(TokenType::LEFT_BRACE(Token::new(self.cell(), (), self.line))),
-            ')' => self.tokens.push(TokenType::RIGHT_BRACE(Token::new(self.cell(), (), self.line))),
-            '{' => self.tokens.push(TokenType::LEFT_BRACE(Token::new(self.cell(), (), self.line))),
-            '}' => self.tokens.push(TokenType::RIGHT_BRACE(Token::new(self.cell(), (), self.line))),
-            ',' => self.tokens.push(TokenType::COMMA(Token::new(self.cell(), (), self.line))),
-            '.' => self.tokens.push(TokenType::DOT(Token::new(self.cell(), (), self.line))),
-            '-' => self.tokens.push(TokenType::MINUS(Token::new(self.cell(), (), self.line))),
-            '+' => self.tokens.push(TokenType::PLUS(Token::new(self.cell(), (), self.line))),
-            ';' => self.tokens.push(TokenType::SEMICOLON(Token::new(self.cell(), (), self.line))),
-            '*' => self.tokens.push(TokenType::STAR(Token::new(self.cell(), (), self.line))), 
-            // two char tokens
-            '!' => self.tokens.push(
-                if self.next('=') {
-                    self.current += 1;
-                    TokenType::BANG_EQUAL(Token::new(self.cell(), (), self.line))
-                } else {
-                    TokenType::BANG(Token::new(self.cell(), (), self.line))
-                }
-            ),
-            '<' => self.tokens.push(
-                if self.next('=') {
-                    self.current += 1;
-                    TokenType::LESS_EQUAL(Token::new(self.cell(), (), self.line))
-                } else {
-                    TokenType::EQUAL(Token::new(self.cell(), (), self.line))
-                }
-            ),
-            '>' => self.tokens.push(
-                if self.next('=') {
-                    self.current += 1;
-                    TokenType::GREATER_EQUAL(Token::new(self.cell(), (), self.line))
-                } else {
-                    TokenType::GREATER(Token::new(self.cell(), (), self.line))
-                }
-            ),
+          
             '=' => self.tokens.push(
                 if self.next('=') {
                     self.current += 1;
