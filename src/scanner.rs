@@ -8,13 +8,14 @@ pub struct Scanner {
     line: u64, // current line no
     start: u64, // start of token which is being scanned
     current: u64, // index of token which is being scanned 
+    multi_line_comment: u32,
 }
 
 impl Scanner {
     /**  helper functions **/
     // returns char at "current"
-    pub fn cell(&self) -> String {
-        self.source[(self.current - 1) as usize].to_string()
+    pub fn cell(&self) -> char {
+        self.source[(self.current) as usize]
     }
 
     // checks if lexer has reached source eof
@@ -27,21 +28,20 @@ impl Scanner {
         if self.is_eof() {
             false
         } else {
-            self.source[self.current as usize] == next_char
+            self.source[(self.current + 1) as usize] == next_char
         }
     }
 
     pub fn get_identifier(&mut self) -> TokenType {
         // identifiers are allowed to contain alphabetic, numeric character and '_' char
-        while (self.cell().chars().all(|x| x.is_alphabetic() || x.is_digit(10) || x == '_')) {
+        while (!self.is_eof() && (self.cell().is_alphabetic() || self.cell().is_digit(10) || self.cell() == '_')) {
             self.current += 1;
-            if self.is_eof() { break; }
         }
 
         self.current -= 1;
 
         let start = (self.start) as usize;
-        let end = (self.current) as usize;
+        let end = (self.current + 1) as usize;
         let identifier: String = self.source[start..end].iter().collect();
         // match the identifier with existing keywords
         match identifier.as_str() {
@@ -69,18 +69,15 @@ impl Scanner {
 
     pub fn get_number(&mut self) -> Option<f64> {
         
-        while (self.cell().chars().all(|x| x.is_digit(10) || x == '.')) {
+        while (!self.is_eof() && (self.cell().is_digit(10) || self.cell() == '.')) {
             self.current += 1;
-            if self.is_eof() {
-                break;
-            }
         }
 
         self.current -= 1;
-       
+
         // index the string
         let start = (self.start) as usize;
-        let end = (self.current) as usize;
+        let end = (self.current + 1) as usize;
         let s: String = self.source[start..end].iter().collect();
         // check if numeric string can be parsed
         let n = s.trim_end().parse();
@@ -95,7 +92,7 @@ impl Scanner {
     pub fn get_string(&mut self) -> Option<String> {
         // at function call "current" points to first char of string literal
         while (!self.next('"') && !self.is_eof()) {
-            if self.cell() == "\n" {
+            if self.cell() == '\n' {
                 self.line += 1;
             }
             self.current += 1;
@@ -125,17 +122,66 @@ impl Scanner {
     // scans for an individual token at start location (at function call start == current)
     // throws syntax error if finds an unexpected character
     pub fn scan_token(&mut self) {
-        let c = self.source[self.current as usize];
-        self.current += 1;
 
+        // handles multi-line comments
+        while self.multi_line_comment > 0 {
+            if self.cell() == '*' && self.next('/') {
+                self.multi_line_comment -= 1;
+                self.current += 1;
+            } else if self.cell() == '/' && self.next('*') {
+                self.multi_line_comment += 1;
+                self.current += 1;
+            } else if self.cell() == '\n' {
+                self.line += 1;
+            }
+            self.current += 1;
+        }
+        
+        let c = self.cell();
+        
         match (c) {
-          
+            // single char tokens
+            '(' => self.tokens.push(TokenType::LEFT_PAREN(Token::new(c.to_string(), (), self.line))),
+            ')' => self.tokens.push(TokenType::RIGHT_PAREN(Token::new(c.to_string(), (), self.line))),
+            '{' => self.tokens.push(TokenType::LEFT_BRACE(Token::new(c.to_string(), (), self.line))),
+            '}' => self.tokens.push(TokenType::RIGHT_BRACE(Token::new(c.to_string(), (), self.line))),
+            ',' => self.tokens.push(TokenType::COMMA(Token::new(c.to_string(), (), self.line))),
+            '.' => self.tokens.push(TokenType::DOT(Token::new(c.to_string(), (), self.line))),
+            '-' => self.tokens.push(TokenType::MINUS(Token::new(c.to_string(), (), self.line))),
+            '+' => self.tokens.push(TokenType::PLUS(Token::new(c.to_string(), (), self.line))),
+            ';' => self.tokens.push(TokenType::SEMICOLON(Token::new(c.to_string(), (), self.line))),
+            '*' => self.tokens.push(TokenType::STAR(Token::new(c.to_string(), (), self.line))), 
+            // two char tokens
+            '!' => self.tokens.push(
+                if self.next('=') {
+                    self.current += 1;
+                    TokenType::BANG_EQUAL(Token::new("!=".to_string(), (), self.line))
+                } else {
+                    TokenType::BANG(Token::new(c.to_string(), (), self.line))
+                }
+            ),
+            '<' => self.tokens.push(
+                if self.next('=') {
+                    self.current += 1;
+                    TokenType::LESS_EQUAL(Token::new("<=".to_string(), (), self.line))
+                } else {
+                    TokenType::EQUAL(Token::new(c.to_string(), (), self.line))
+                }
+            ),
+            '>' => self.tokens.push(
+                if self.next('=') {
+                    self.current += 1;
+                    TokenType::GREATER_EQUAL(Token::new(">=".to_string(), (), self.line))
+                } else {
+                    TokenType::GREATER(Token::new(c.to_string(), (), self.line))
+                }
+            ),
             '=' => self.tokens.push(
                 if self.next('=') {
                     self.current += 1;
-                    TokenType::EQUAL(Token::new(self.cell(), (), self.line))
+                    TokenType::EQUAL_EQUAL(Token::new("==".to_string(), (), self.line))
                 } else {
-                    TokenType::EQUAL_EQUAL(Token::new(self.cell(), (), self.line))
+                    TokenType::EQUAL(Token::new(c.to_string(), (), self.line))
                 }
             ),
             // special case: '/' stands for division, while // stands for comment
@@ -144,8 +190,11 @@ impl Scanner {
                     while !(self.is_eof() || self.next('\n')) { 
                         self.current += 1;
                     }
+                } else if (self.next('*')) {
+                    self.multi_line_comment += 1;
+                    self.current += 1;
                 } else {
-                    self.tokens.push(TokenType::SLASH(Token::new(self.cell(), (), self.line)))
+                    self.tokens.push(TokenType::SLASH(Token::new(c.to_string(), (), self.line)))
                 }
             },
             // strings
@@ -156,7 +205,7 @@ impl Scanner {
             },
             '\n' => self.line += 1,
             '\r' | ' ' => {},
-            // default
+            // default 
             _ => {
                 if c.is_digit(10) {
                     if let Some(n) = self.get_number() {
@@ -170,6 +219,7 @@ impl Scanner {
                 }
             },
         }
+        self.current += 1; // advance to next char in source code
     }
 
     // scans for tokens in source file
@@ -185,6 +235,6 @@ impl Scanner {
         let chars: Vec<char> = source.chars().collect();
         let tokens: Vec<TokenType> = Vec::new();
         //println!("chars: {:?}", chars);
-        Scanner {source: chars, tokens: tokens, line: 1, start: 0, current: 0}
+        Scanner {source: chars, tokens: tokens, line: 1, start: 0, current: 0, multi_line_comment: 0}
     }
 }
