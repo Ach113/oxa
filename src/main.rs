@@ -12,8 +12,10 @@ use scanner::Scanner;
 // executes given instruction/set of instructions
 fn run(code: String) -> Result<(), Box<dyn Error>> {
     let mut scanner = Scanner::new(code);
-    scanner.scan_tokens();
-    scanner.test();
+    let tokens = scanner.scan_tokens();
+    for t in tokens {
+        println!("{:?}", t);
+    }
     Ok(())
 }
 
@@ -30,7 +32,7 @@ fn runfile(filename: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-//  Read a line of input, Evaluate it, Print the result, then Loop
+// Read a line of input, Evaluate it, Print the result, then Loop
 fn repl() -> Result<(), Box<dyn Error>> {
     loop {
         print!(">> ");

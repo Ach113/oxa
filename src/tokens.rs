@@ -6,69 +6,77 @@ use std::any::Any;
 #[derive(Debug)]
 pub enum TokenType {
     // single char tokens
-    LEFT_PAREN(Token<()>),
-    RIGHT_PAREN(Token<()>), 
-    LEFT_BRACE(Token<()>), 
-    RIGHT_BRACE(Token<()>),
-    COMMA(Token<()>),
-    DOT(Token<()>),
-    MINUS(Token<()>), 
-    PLUS(Token<()>), 
-    SEMICOLON(Token<()>), 
-    SLASH(Token<()>), 
-    STAR(Token<()>),
+    LEFT_PAREN,
+    RIGHT_PAREN, 
+    LEFT_BRACE, 
+    RIGHT_BRACE,
+    COMMA,
+    DOT,
+    MINUS, 
+    PLUS, 
+    SEMICOLON, 
+    SLASH, 
+    STAR,
 
     // One or two character tokens.
-    BANG(Token<()>), 
-    BANG_EQUAL(Token<()>),
-    EQUAL(Token<()>), 
-    EQUAL_EQUAL(Token<()>),
-    GREATER(Token<()>), 
-    GREATER_EQUAL(Token<()>),
-    LESS(Token<()>), 
-    LESS_EQUAL(Token<()>),
+    BANG, 
+    BANG_EQUAL,
+    EQUAL, 
+    EQUAL_EQUAL,
+    GREATER, 
+    GREATER_EQUAL,
+    LESS, 
+    LESS_EQUAL,
 
     // Literals.
-    IDENTIFIER(Token<String>), 
-    STRING(Token<String>), 
-    NUMBER(Token<f64>),
+    IDENTIFIER, 
+    STRING, 
+    NUMBER,
 
     // Keywords.
-    AND(Token<()>), 
-    CLASS(Token<()>), 
-    ELSE(Token<()>), 
-    FALSE(Token<()>), 
-    FUN(Token<()>), 
-    FOR(Token<()>), 
-    IF(Token<()>), 
-    NIL(Token<()>), 
-    OR(Token<()>),
-    PRINT(Token<()>), 
-    RETURN(Token<()>), 
-    SUPER(Token<()>), 
-    THIS(Token<()>), 
-    TRUE(Token<()>), 
-    VAR(Token<()>), 
-    WHILE(Token<()>),
+    AND, 
+    CLASS, 
+    ELSE, 
+    FALSE, 
+    FUN, 
+    FOR, 
+    IF, 
+    NIL, 
+    OR,
+    PRINT, 
+    RETURN, 
+    SUPER, 
+    THIS, 
+    TRUE, 
+    VAR, 
+    WHILE,
 
-    EOF(Token<()>)
+    EOF
 }
 
 #[derive(Debug)]
-pub struct Token<T> {
-    lexeme: String,
-    literal: T, // literals can be of any type (number or string in this case)
-    line: u64
+pub enum Literal {
+    STRING(String),
+    NUMERIC(f64),
+    NIL,
 }
 
-impl<T> Token<T> {
-    pub fn new(lexeme: String, literal: T, line: u64) -> Token<T> {
-        Token {lexeme, literal, line}
+#[derive(Debug)]
+pub struct Token {
+    lexeme: String,
+    literal: Literal, // literals can be of any type (numbe, string or nil in this case)
+    t: TokenType,
+    line: u64,
+}
+
+impl Token {
+    pub fn new(lexeme: String, literal: Literal, t: TokenType, line: u64) -> Token {
+        Token {lexeme, literal, t, line}
     }
 }
 
-impl <T: fmt::Display> fmt::Display for Token<T> {
+impl  fmt::Display for Token{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.lexeme, self.literal)
+        write!(f, "{} {:?} {:?}", self.lexeme, self.literal, self.t)
     }
 }
