@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::error::Error;
 
 // modules made by yours truly

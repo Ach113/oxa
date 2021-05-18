@@ -14,6 +14,10 @@ pub struct Parser {
 }
 
 impl Parser {
+    // constructor
+    pub fn new(tokens: Vec<Token>) -> Parser {
+        Parser {tokens: tokens, current: 0}
+    }
     /*** helper functions ***/
 
     // checks if parser has reached the end
@@ -23,11 +27,11 @@ impl Parser {
 
     // returns token at index "current"
     fn peek(&self) -> Token {
-        self.tokens[self.current as usize]
+        self.tokens[self.current as usize].clone()
     }
 
     fn previous(&self) -> Token {
-        self.tokens[(self.current - 1) as usize]
+        self.tokens[(self.current - 1) as usize].clone()
     }
 
     // returns current token, increments index
@@ -47,17 +51,17 @@ impl Parser {
     }
 
     fn consume(&self, t: TokenType, message: &str) {
-        todo!();
+        todo!()
     }
 
     /*** Expressions ***/
 
-    pub fn expression(&self) -> Box<dyn Expr> {
+    pub fn expression(&mut self) -> Box<dyn Expr> {
         self.equality()
     }
 
     // expression with lowest precendence
-    fn equality(&self) -> Box<dyn Expr> {
+    fn equality(&mut self) -> Box<dyn Expr> {
         // by default an expression of lower precendence is returned
         let mut expr = self.comparison();
 
@@ -65,20 +69,15 @@ impl Parser {
         // while current token is "==" or "!="
         while equalities.iter().any(|x| self.check_type(x)) {
             self.advance();
-            let operator: Token = self.previous();
-            let right = self.comparison();
-            expr = Box::new(Binary::new(operator, *expr, *right).unwrap());
+            let operator = self.previous();
+            let mut right = self.comparison();
+            expr = Box::new(Binary::new(operator, expr, right).unwrap());
         }
         expr
     }
 
-    fn comparison(&self) -> Box<dyn Expr> {
-        todo!();
-    }
-
-    /*
     // since term expressions are also binary, this code looks identical to that of equality(), albeit with lower precendence
-    fn comparison(&self) -> Box<dyn Expr> {
+    fn comparison(&mut self) -> Box<dyn Expr> {
         let mut expr = self.term();
 
         while comparisons.iter().any(|x| self.check_type(x)) {
@@ -90,7 +89,7 @@ impl Parser {
         expr
     }
 
-    fn term(&self) -> Box<dyn Expr> {
+    fn term(&mut self) -> Box<dyn Expr> {
         let mut expr = self.factor();
 
         while terms.iter().any(|x| self.check_type(x)) {
@@ -102,7 +101,7 @@ impl Parser {
         expr
     }
 
-    fn factor(&self) -> Box<dyn Expr> {
+    fn factor(&mut self) -> Box<dyn Expr> {
         let mut expr = self.unary();
 
         while factors.iter().any(|x| self.check_type(x)) {
@@ -114,7 +113,7 @@ impl Parser {
         expr
     }
 
-    fn unary(&self) -> Box<dyn Expr> {
+    fn unary(&mut self) -> Box<dyn Expr> {
         while unaries.iter().any(|x| self.check_type(x)) {
             self.advance();
             let operator: Token = self.previous();
@@ -125,7 +124,7 @@ impl Parser {
     }
 
     // either returns literal value of the expression or another expression wrapped in parentheses
-    fn primary(&self) -> Option<Box<dyn Expr>> {
+    fn primary(&mut self) -> Option<Box<dyn Expr>> {
         if vec![TokenType::IDENTIFIER, TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
             return Some(Box::new(Literal::new(self.advance()).unwrap()));
         }
@@ -133,10 +132,9 @@ impl Parser {
         if self.check_type(&TokenType::LEFT_PAREN) {
             let mut expr = self.expression();
             self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.");
-            return Some(Box::new(Grouping::new(*expr)));
+            return Some(Box::new(Grouping::new(expr)));
         }
         // this line is not supposed to execute
-        Box::new(None)
+        None
     }
-    */
 }

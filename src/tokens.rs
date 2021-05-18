@@ -3,7 +3,7 @@
 use std::fmt;
 use std::any::Any;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // single char tokens
     LEFT_PAREN,
@@ -54,7 +54,7 @@ pub enum TokenType {
     EOF
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     STRING(String),
     NUMERIC(f64),
@@ -73,7 +73,7 @@ impl fmt::Display for Literal {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub lexeme: String,
     pub literal: Literal, // literals can be of any type (number, string, bool or nil in this case)
@@ -92,3 +92,11 @@ impl fmt::Display for Token{
         write!(f, "{} {:?} {:?}", self.lexeme, self.literal, self.t)
     }
 }
+
+//impl Copy for Token { }
+/*
+impl Clone for Token {
+    fn clone(&self) -> Token {
+        Token::new(self.lexeme.clone(), self.literal.clone(), self.t.clone(), self.line)
+    }
+} */
