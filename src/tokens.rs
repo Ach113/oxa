@@ -3,7 +3,7 @@
 use std::fmt;
 use std::any::Any;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
     // single char tokens
     LEFT_PAREN,
@@ -58,15 +58,27 @@ pub enum TokenType {
 pub enum Literal {
     STRING(String),
     NUMERIC(f64),
+    BOOL(bool),
     NIL,
+}
+
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Literal::STRING(x) => write!(f, "{}", x),
+            Literal::NUMERIC(x) => write!(f, "{}", x),
+            Literal::BOOL(x) => write!(f, "{}", x),
+            Literal::NIL => write!(f, ""),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Token {
-    lexeme: String,
-    literal: Literal, // literals can be of any type (numbe, string or nil in this case)
-    t: TokenType,
-    line: u64,
+    pub lexeme: String,
+    pub literal: Literal, // literals can be of any type (number, string, bool or nil in this case)
+    pub t: TokenType,
+    pub line: u64,
 }
 
 impl Token {
@@ -75,7 +87,7 @@ impl Token {
     }
 }
 
-impl  fmt::Display for Token{
+impl fmt::Display for Token{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {:?} {:?}", self.lexeme, self.literal, self.t)
     }

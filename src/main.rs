@@ -6,6 +6,8 @@ use std::error::Error;
 // modules made by yours truly
 mod tokens;
 mod scanner;
+mod AST;
+mod parser;
 
 use scanner::Scanner;
 
@@ -13,9 +15,7 @@ use scanner::Scanner;
 fn run(code: String) -> Result<(), Box<dyn Error>> {
     let mut scanner = Scanner::new(code);
     let tokens = scanner.scan_tokens();
-    for t in tokens {
-        println!("{:?}", t);
-    }
+    
     Ok(())
 }
 
