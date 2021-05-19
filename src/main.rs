@@ -10,12 +10,18 @@ mod AST;
 mod parser;
 
 use scanner::Scanner;
+use parser::Parser;
 
 // executes given instruction/set of instructions
 fn run(code: String) -> Result<(), Box<dyn Error>> {
     let mut scanner = Scanner::new(code);
     let tokens = scanner.scan_tokens();
-    
+    for t in &tokens {
+        println!("Tokens: {}", t);
+    }
+    let mut parser = Parser::new(tokens);
+    let expr = parser.expression();
+    println!("{}", expr.unwrap().eval());
     Ok(())
 }
 

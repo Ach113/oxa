@@ -8,6 +8,8 @@ const terms: [TokenType; 2] = [TokenType::PLUS, TokenType::MINUS];
 const factors: [TokenType; 2] = [TokenType::STAR, TokenType::SLASH];
 const unaries: [TokenType; 2] = [TokenType::BANG, TokenType::MINUS];
 
+type Error = Box<dyn std::error::Error>;
+
 pub struct Parser {
     tokens: Vec<Token>,
     current: u32,
@@ -21,7 +23,7 @@ impl Parser {
     /*** helper functions ***/
 
     // checks if parser has reached the end
-    fn is_end(&self) -> bool {
+    fn at_end(&self) -> bool {
         (self.current as usize) == self.tokens.len() 
     }
 
@@ -36,7 +38,7 @@ impl Parser {
 
     // returns current token, increments index
     fn advance(&mut self) -> Token {
-        if !self.is_end() {
+        if !self.at_end() {
             self.current += 1;
         }
         self.previous()
@@ -44,97 +46,149 @@ impl Parser {
 
     // check if passed token type matches that of a token at current index
     fn check_type(&self, t: &TokenType) -> bool {
-        if self.is_end() {
+        if self.at_end() {
             return false;
         }
         self.peek().t == *t
     }
 
-    fn consume(&self, t: TokenType, message: &str) {
-        todo!()
-    }
-
     /*** Expressions ***/
 
-    pub fn expression(&mut self) -> Box<dyn Expr> {
+    pub fn expression(&mut self) -> Result<Box<dyn Expr>, Error> {
         self.equality()
     }
 
     // expression with lowest precendence
-    fn equality(&mut self) -> Box<dyn Expr> {
-        // by default an expression of lower precendence is returned
-        let mut expr = self.comparison();
-
-        // entering this loop means that parser has encountered an equality operation
-        // while current token is "==" or "!="
-        while equalities.iter().any(|x| self.check_type(x)) {
-            self.advance();
-            let operator = self.previous();
-            let mut right = self.comparison();
-            expr = Box::new(Binary::new(operator, expr, right).unwrap());
+    fn equality(&mut self) -> Result<Box<dyn Expr>, Error> {
+        match self.comparison() {
+            Ok(mut expr) => {
+                while equalities.iter().any(|x| self.check_type(x)) {
+                    self.advance();
+                    let operator = self.previous();
+                    expr = match self.comparison() {
+                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Err(right) => return Err(right),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
         }
-        expr
     }
 
     // since term expressions are also binary, this code looks identical to that of equality(), albeit with lower precendence
-    fn comparison(&mut self) -> Box<dyn Expr> {
-        let mut expr = self.term();
-
-        while comparisons.iter().any(|x| self.check_type(x)) {
-            self.advance();
-            let operator: Token = self.previous();
-            let right = self.term();
-            expr = Box::new(Binary::new(operator, expr, right).unwrap());
+    fn comparison(&mut self) -> Result<Box<dyn Expr>, Error> {
+        match self.term() {
+            Ok(mut expr) => {
+                while comparisons.iter().any(|x| self.check_type(x)) {
+                    self.advance();
+                    let operator = self.previous();
+                    expr = match self.term() {
+                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Err(right) => return Err(right),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
         }
-        expr
     }
 
-    fn term(&mut self) -> Box<dyn Expr> {
-        let mut expr = self.factor();
-
-        while terms.iter().any(|x| self.check_type(x)) {
-            self.advance();
-            let operator: Token = self.previous();
-            let right = self.factor();
-            expr = Box::new(Binary::new(operator, expr, right).unwrap());
+    fn term(&mut self) -> Result<Box<dyn Expr>, Error> {
+        match self.factor() {
+            Ok(mut expr) => {
+                while terms.iter().any(|x| self.check_type(x)) {
+                    self.advance();
+                    let operator = self.previous();
+                    expr = match self.factor() {
+                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Err(right) => return Err(right),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
         }
-        expr
     }
 
-    fn factor(&mut self) -> Box<dyn Expr> {
-        let mut expr = self.unary();
-
-        while factors.iter().any(|x| self.check_type(x)) {
-            self.advance();
-            let operator: Token = self.previous();
-            let right = self.unary();
-            expr = Box::new(Binary::new(operator, expr, right).unwrap());
+    fn factor(&mut self) -> Result<Box<dyn Expr>, Error> {
+        match self.unary() {
+            Ok(mut expr) => {
+                while factors.iter().any(|x| self.check_type(x)) {
+                    self.advance();
+                    let operator = self.previous();
+                    expr = match self.unary() {
+                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Err(right) => return Err(right),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
         }
-        expr
     }
 
-    fn unary(&mut self) -> Box<dyn Expr> {
-        while unaries.iter().any(|x| self.check_type(x)) {
+    fn unary(&mut self) -> Result<Box<dyn Expr>, Error> {
+        if unaries.iter().any(|x| self.check_type(x)) {
             self.advance();
-            let operator: Token = self.previous();
-            let right = self.unary();
-            return Box::new(Unary::new(operator, right).unwrap());
+            let operator = self.previous();
+            match self.unary() {
+                Ok(right) => return Ok(Box::new(Unary::new(operator, right).unwrap())),
+                Err(right) => return Err(right),
+            }
         }
-        self.primary().unwrap()
+        match self.primary() {
+            Ok(x) => return Ok(x),
+            Err(x) => return Err(x),
+        } 
     }
 
     // either returns literal value of the expression or another expression wrapped in parentheses
-    fn primary(&mut self) -> Option<Box<dyn Expr>> {
+    fn primary(&mut self) -> Result<Box<dyn Expr>, Error> {
         if vec![TokenType::IDENTIFIER, TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
-            return Some(Box::new(Literal::new(self.advance()).unwrap()));
+            return Ok(Box::new(Literal::new(self.advance()).unwrap()));
         }
 
         if self.check_type(&TokenType::LEFT_PAREN) {
-            let mut expr = self.expression();
-            self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.");
-            return Some(Box::new(Grouping::new(expr)));
+            self.advance();
+            match self.expression() {
+                Ok(expr) => {
+                    self.advance();
+                    self.consume(TokenType::RIGHT_PAREN, "Expected ')' after expression");
+                    return Ok(Box::new(Grouping::new(expr)));
+                },
+                Err(e) => return Err(e)
+            }
+            
         }
         // this line is not supposed to execute
-        None
+        Err("Expected expression".into())
+    }
+
+    /*** methods for error handling ***/
+
+    fn consume(&mut self, t: TokenType, message: &str) {
+        if self.check_type(&t) {
+            self.advance();
+        } else {
+            crate::error("Syntax error", message, self.previous().line);
+        }
+    }
+
+    // when error is encountered, consumes all tokens until the start of new statement, to avoid redundant errors
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.at_end() {
+            if self.previous().t == TokenType::SEMICOLON { return; }
+
+            // start of new statement is indicated by following token types
+            match (self.peek().t) {
+                TokenType::CLASS | TokenType::FUN | TokenType::VAR | TokenType::FOR | TokenType::IF | TokenType::WHILE | TokenType::PRINT | TokenType::RETURN => {
+                    return;
+                },
+                _ => { self.advance(); }
+            }
+        }
     }
 }

@@ -217,12 +217,12 @@ impl Scanner {
     }
 
     // scans for tokens in source file
-    pub fn scan_tokens(&mut self) -> &Vec<Token> {
+    pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_eof() { 
             self.start = self.current;
             self.scan_token();
         }
-        &self.tokens
+        self.tokens.clone()
     }
 
     // constructor
