@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::any::Any;
+use core::ops::{Add, Sub, Mul, Div};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -54,7 +55,7 @@ pub enum TokenType {
     EOF
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub enum Literal {
     STRING(String),
     NUMERIC(f64),
@@ -93,10 +94,68 @@ impl fmt::Display for Token{
     }
 }
 
-//impl Copy for Token { }
-/*
-impl Clone for Token {
-    fn clone(&self) -> Token {
-        Token::new(self.lexeme.clone(), self.literal.clone(), self.t.clone(), self.line)
+impl Add for Literal {
+    type Output = Result<Literal, String>;
+
+    fn add(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a + b)),
+            (Literal::STRING(a), Literal::STRING(b)) => Ok(Literal::STRING(format!("{}{}", a, b).to_string())),
+            _ => Err(String::from("TypeError for operator +"))
+        }
     }
-} */
+}
+
+
+impl Sub for Literal {
+    type Output = Result<Literal, String>;
+
+    fn sub(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a - b)),
+            _ => Err(String::from("TypeError for operator -"))
+        }
+    }
+}
+
+impl Mul for Literal {
+    type Output = Result<Literal, String>;
+
+    fn mul(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a * b)),
+            (Literal::NUMERIC(a), Literal::STRING(b)) => {
+                Ok(Literal::STRING(b.repeat(a as usize)))
+            },
+            (Literal::STRING(a), Literal::NUMERIC(b)) => {
+                Ok(Literal::STRING(a.repeat(b as usize)))
+            },
+            _ => Err(String::from("TypeError for operator *"))
+        }
+    }
+}
+
+impl Div for Literal {
+    type Output = Result<Literal, String>;
+
+    fn div(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a / b)),
+            _ => Err(String::from("TypeError for operator /"))
+        }
+    }
+}
+
+/*
+impl ToString for Literal {
+    fn to_string(self) -> String {
+        match self {
+            Literal::NUMERIC(x) => String::from("numeric"),
+            Literal::BOOL(x) => String::from("bool"),
+            Literal::STRING(x) => String::from("string"),
+            Literal::NIL => String::from("nil"),
+        }
+    }
+}
+*/
+

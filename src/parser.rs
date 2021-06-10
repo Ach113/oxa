@@ -153,9 +153,10 @@ impl Parser {
             self.advance();
             match self.expression() {
                 Ok(expr) => {
-                    self.advance();
-                    self.consume(TokenType::RIGHT_PAREN, "Expected ')' after expression");
-                    return Ok(Box::new(Grouping::new(expr)));
+                    match self.consume(TokenType::RIGHT_PAREN, "Expected ')' after expression") {
+                        Err(e) => return Err(e),
+                        _ => return Ok(Box::new(Grouping::new(expr))),
+                    };
                 },
                 Err(e) => return Err(e)
             }
@@ -167,11 +168,13 @@ impl Parser {
 
     /*** methods for error handling ***/
 
-    fn consume(&mut self, t: TokenType, message: &str) {
+    fn consume(&mut self, t: TokenType, message: &str) -> Result<(), Error> {
         if self.check_type(&t) {
             self.advance();
+            Ok(())
         } else {
             crate::error("Syntax error", message, self.previous().line);
+            Err(message.into())
         }
     }
 

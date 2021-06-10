@@ -3,7 +3,7 @@ use std::fmt;
 
 // generic expression trait
 pub trait Expr {
-    fn eval(&self) -> String;
+    fn eval(&self) -> crate::tokens::Literal;
 }
 
 // binary expression
@@ -32,32 +32,117 @@ pub struct Grouping {
 /*** eval implementations ***/
 
 impl Expr for Binary {
-    fn eval(&self) -> String {
-        format!("({} {} {})", self.operator.lexeme, self.left.eval(), self.right.eval())
+    fn eval(&self) -> crate::tokens::Literal {
+        let op = &self.operator.lexeme;
+        let left = self.left.eval();
+        let right = self.right.eval();
+        match &**op {
+            "==" => {
+                crate::tokens::Literal::BOOL(left == right)
+            },
+            "!=" => {
+                crate::tokens::Literal::BOOL(left != right)
+            },
+            ">=" => {
+                crate::tokens::Literal::BOOL(left >= right)
+            },
+            "<=" => {
+                crate::tokens::Literal::BOOL(left <= right)
+            },
+            ">" => {
+                crate::tokens::Literal::BOOL(left > right)
+            }
+            "<" => {
+                crate::tokens::Literal::BOOL(left < right)
+            },
+            "+" => {
+                let res = left.clone() + right.clone();
+                match res {
+                    Ok(x) => x,
+                    Err(x) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for +: {}, {}", left.to_string(), right.to_string()), self.operator.line);
+                        crate::tokens::Literal::NIL
+                    }
+                }
+            },
+            "-" => {
+                let res = left.clone() - right.clone();
+                match res {
+                    Ok(x) => x,
+                    Err(x) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for -: {}, {}", left.to_string(), right.to_string()), self.operator.line);
+                        crate::tokens::Literal::NIL
+                    }
+                }
+            },
+            "/" => {
+                let res = left.clone() / right.clone();
+                match res {
+                    Ok(x) => x,
+                    Err(x) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for /: {}, {}", left.to_string(), right.to_string()), self.operator.line);
+                        crate::tokens::Literal::NIL
+                    }
+                }
+            },
+            "*" => {
+                let res = left.clone() * right.clone();
+                match res {
+                    Ok(x) => x,
+                    Err(x) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for *: {}, {}", left.to_string(), right.to_string()), self.operator.line);
+                        crate::tokens::Literal::NIL
+                    }
+                }
+            },
+            _ => {
+                crate::error("Parsing Error", &format!("Unsupported binary operator {}", op), self.operator.line);
+                crate::tokens::Literal::NIL
+            }
+        }
     }
 }
 
 impl Expr for Unary {
-    fn eval(&self) -> String {
-        format!("({} {})", self.operator.lexeme, self.expression.eval())
+    fn eval(&self) -> crate::tokens::Literal {
+        let op = &self.operator.lexeme;
+        let expr = self.expression.eval();
+        match &**op {
+            "-" => {
+                match expr {
+                    crate::tokens::Literal::NUMERIC(x) => crate::tokens::Literal::NUMERIC(-x),
+                    _ => {
+                        crate::error("Parsing error", &format!("invalid right hand side expression for operator {}", op), self.operator.line);
+                        crate::tokens::Literal::NIL
+                    }
+                }
+            },
+            "!" => {
+                match expr {
+                    crate::tokens::Literal::BOOL(x) => crate::tokens::Literal::BOOL(!x),
+                    _ => {
+                        crate::error("Parsing error", &format!("invalid right hand side expression for operator {}", op), self.operator.line);
+                        crate::tokens::Literal::NIL
+                    }
+                }
+            },
+            _ =>  {
+                crate::error("Parsing error", &format!("invalid unary operator {}", op), self.operator.line);
+                crate::tokens::Literal::NIL
+            }
+        }
     }
 }
 
 impl Expr for Literal {
-    fn eval(&self) -> String {
-        let value = match &self.value.literal {
-            crate::tokens::Literal::STRING(x) => x.clone(),
-            crate::tokens::Literal::NUMERIC(x) => x.to_string(),
-            crate::tokens::Literal::BOOL(x) => x.to_string(),
-            crate::tokens::Literal::NIL => "".to_string(),
-        };
-        format!("{}", self.value.literal)
+    fn eval(&self) -> crate::tokens::Literal {
+        self.value.literal.clone()
     }
 }
 
 impl Expr for Grouping {
-    fn eval(&self) -> String {
-        format!("({})", self.expression.eval())
+    fn eval(&self) -> crate::tokens::Literal {
+        self.expression.eval()
     }
 } 
 
@@ -71,7 +156,7 @@ impl Binary {
                 Some(Binary{operator, left, right})
             },
             _ => {
-                crate::error("Parsing error!", &format!("Unexpected operator {} for binary expression", operator.lexeme), operator.line);
+                crate::error("Parsing error!", &&format!("Unexpected operator {} for binary expression", operator.lexeme), operator.line);
                 None
             }
         }
@@ -83,7 +168,7 @@ impl Unary {
         match &operator.t {
             TokenType::MINUS | TokenType::BANG => Some(Unary{operator, expression}),
             _ => {
-                crate::error("Parsing error!", &format!("Unexpected operator {} for unary expression", operator.lexeme), operator.line);
+                crate::error("Parsing error!", &&format!("Unexpected operator {} for unary expression", operator.lexeme), operator.line);
                 None
             }
         }
@@ -101,7 +186,7 @@ impl Literal {
         match &value.t {
             TokenType::IDENTIFIER | TokenType::NUMBER | TokenType::STRING | TokenType::NIL => Some(Literal{value}),
             _ => {
-                crate::error("Parsing error!", &format!("Unexpected value {} for a literal", value.lexeme), value.line);
+                crate::error("Parsing error!", &&format!("Unexpected value {} for a literal", value.lexeme), value.line);
                 None
             }
         }

@@ -19,9 +19,15 @@ fn run(code: String) -> Result<(), Box<dyn Error>> {
     for t in &tokens {
         println!("Tokens: {}", t);
     }
+    println!("-------------------------------------------");
+    // construct parser with given tokens
     let mut parser = Parser::new(tokens);
+    // get syntax tree structure from the parser
     let expr = parser.expression();
-    println!("{}", expr.unwrap().eval());
+    // evaluate the syntax tree
+    let result = expr.unwrap().eval();
+    // result is of type tokens::Literal
+    println!("{}", result);
     Ok(())
 }
 
