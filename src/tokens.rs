@@ -2,73 +2,160 @@
 
 use std::fmt;
 use std::any::Any;
+use core::ops::{Add, Sub, Mul, Div};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // single char tokens
-    LEFT_PAREN(Token<()>),
-    RIGHT_PAREN(Token<()>), 
-    LEFT_BRACE(Token<()>), 
-    RIGHT_BRACE(Token<()>),
-    COMMA(Token<()>),
-    DOT(Token<()>),
-    MINUS(Token<()>), 
-    PLUS(Token<()>), 
-    SEMICOLON(Token<()>), 
-    SLASH(Token<()>), 
-    STAR(Token<()>),
+    LEFT_PAREN,
+    RIGHT_PAREN, 
+    LEFT_BRACE, 
+    RIGHT_BRACE,
+    COMMA,
+    DOT,
+    MINUS, 
+    PLUS, 
+    SEMICOLON, 
+    SLASH, 
+    STAR,
 
     // One or two character tokens.
-    BANG(Token<()>), 
-    BANG_EQUAL(Token<()>),
-    EQUAL(Token<()>), 
-    EQUAL_EQUAL(Token<()>),
-    GREATER(Token<()>), 
-    GREATER_EQUAL(Token<()>),
-    LESS(Token<()>), 
-    LESS_EQUAL(Token<()>),
+    BANG, 
+    BANG_EQUAL,
+    EQUAL, 
+    EQUAL_EQUAL,
+    GREATER, 
+    GREATER_EQUAL,
+    LESS, 
+    LESS_EQUAL,
 
     // Literals.
-    IDENTIFIER(Token<String>), 
-    STRING(Token<String>), 
-    NUMBER(Token<f64>),
+    IDENTIFIER, 
+    STRING, 
+    NUMBER,
 
     // Keywords.
-    AND(Token<()>), 
-    CLASS(Token<()>), 
-    ELSE(Token<()>), 
-    FALSE(Token<()>), 
-    FUN(Token<()>), 
-    FOR(Token<()>), 
-    IF(Token<()>), 
-    NIL(Token<()>), 
-    OR(Token<()>),
-    PRINT(Token<()>), 
-    RETURN(Token<()>), 
-    SUPER(Token<()>), 
-    THIS(Token<()>), 
-    TRUE(Token<()>), 
-    VAR(Token<()>), 
-    WHILE(Token<()>),
+    AND, 
+    CLASS, 
+    ELSE, 
+    FALSE, 
+    FUN, 
+    FOR, 
+    IF, 
+    NIL, 
+    OR,
+    PRINT, 
+    RETURN, 
+    SUPER, 
+    THIS, 
+    TRUE, 
+    VAR, 
+    WHILE,
 
-    EOF(Token<()>)
+    EOF
 }
 
-#[derive(Debug)]
-pub struct Token<T> {
-    lexeme: String,
-    literal: T, // literals can be of any type (number or string in this case)
-    line: u64
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
+pub enum Literal {
+    STRING(String),
+    NUMERIC(f64),
+    BOOL(bool),
+    NIL,
 }
 
-impl<T> Token<T> {
-    pub fn new(lexeme: String, literal: T, line: u64) -> Token<T> {
-        Token {lexeme, literal, line}
-    }
-}
-
-impl <T: fmt::Display> fmt::Display for Token<T> {
+impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.lexeme, self.literal)
+        match self {
+            Literal::STRING(x) => write!(f, "{}", x),
+            Literal::NUMERIC(x) => write!(f, "{}", x),
+            Literal::BOOL(x) => write!(f, "{}", x),
+            Literal::NIL => write!(f, ""),
+        }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub lexeme: String,
+    pub literal: Literal, // literals can be of any type (number, string, bool or nil in this case)
+    pub t: TokenType,
+    pub line: u64,
+}
+
+impl Token {
+    pub fn new(lexeme: String, literal: Literal, t: TokenType, line: u64) -> Token {
+        Token {lexeme, literal, t, line}
+    }
+}
+
+impl fmt::Display for Token{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {:?} {:?}", self.lexeme, self.literal, self.t)
+    }
+}
+
+impl Add for Literal {
+    type Output = Result<Literal, String>;
+
+    fn add(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a + b)),
+            (Literal::STRING(a), Literal::STRING(b)) => Ok(Literal::STRING(format!("{}{}", a, b).to_string())),
+            _ => Err(String::from("TypeError for operator +"))
+        }
+    }
+}
+
+
+impl Sub for Literal {
+    type Output = Result<Literal, String>;
+
+    fn sub(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a - b)),
+            _ => Err(String::from("TypeError for operator -"))
+        }
+    }
+}
+
+impl Mul for Literal {
+    type Output = Result<Literal, String>;
+
+    fn mul(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a * b)),
+            (Literal::NUMERIC(a), Literal::STRING(b)) => {
+                Ok(Literal::STRING(b.repeat(a as usize)))
+            },
+            (Literal::STRING(a), Literal::NUMERIC(b)) => {
+                Ok(Literal::STRING(a.repeat(b as usize)))
+            },
+            _ => Err(String::from("TypeError for operator *"))
+        }
+    }
+}
+
+impl Div for Literal {
+    type Output = Result<Literal, String>;
+
+    fn div(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a / b)),
+            _ => Err(String::from("TypeError for operator /"))
+        }
+    }
+}
+
+/*
+impl ToString for Literal {
+    fn to_string(self) -> String {
+        match self {
+            Literal::NUMERIC(x) => String::from("numeric"),
+            Literal::BOOL(x) => String::from("bool"),
+            Literal::STRING(x) => String::from("string"),
+            Literal::NIL => String::from("nil"),
+        }
+    }
+}
+*/
+

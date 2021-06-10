@@ -1,19 +1,33 @@
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::error::Error;
 
 // modules made by yours truly
 mod tokens;
 mod scanner;
+mod AST;
+mod parser;
 
 use scanner::Scanner;
+use parser::Parser;
 
 // executes given instruction/set of instructions
 fn run(code: String) -> Result<(), Box<dyn Error>> {
     let mut scanner = Scanner::new(code);
-    scanner.scan_tokens();
-    scanner.test();
+    let tokens = scanner.scan_tokens();
+    for t in &tokens {
+        println!("Tokens: {}", t);
+    }
+    println!("-------------------------------------------");
+    // construct parser with given tokens
+    let mut parser = Parser::new(tokens);
+    // get syntax tree structure from the parser
+    let expr = parser.expression();
+    // evaluate the syntax tree
+    let result = expr.unwrap().eval();
+    // result is of type tokens::Literal
+    println!("{}", result);
     Ok(())
 }
 
@@ -30,7 +44,7 @@ fn runfile(filename: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-//  Read a line of input, Evaluate it, Print the result, then Loop
+// Read a line of input, Evaluate it, Print the result, then Loop
 fn repl() -> Result<(), Box<dyn Error>> {
     loop {
         print!(">> ");
