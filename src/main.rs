@@ -8,33 +8,30 @@ mod tokens;
 mod scanner;
 mod AST;
 mod parser;
+mod environment;
+mod interpreter;
 
 use scanner::Scanner;
 use parser::Parser;
+use tokens::Literal;
+use interpreter::interpret;
 
 // executes given instruction/set of instructions
-fn run(code: String) -> Result<(), Box<dyn Error>> {
+fn run(code: String) -> Result<(), ()> {
     let mut scanner = Scanner::new(code);
+    // scan scource code for tokens
     let tokens = scanner.scan_tokens();
-    for t in &tokens {
-        println!("Tokens: {}", t);
-    }
-    println!("-------------------------------------------");
     // construct parser with given tokens
     let mut parser = Parser::new(tokens);
-    // get syntax tree structure from the parser
-    let expr = parser.expression();
-    // evaluate the syntax tree
-    let result = expr.unwrap().eval();
-    // result is of type tokens::Literal
-    println!("{}", result);
-    Ok(())
+    // get list of statements from the parser
+    let statements = parser.parse();
+    // execute the statements
+    interpret(statements)
 }
 
 // function used to report errors to the user
 fn error(error: &str, message: &str, line: u64) {
     println!("{} at line {}: {}", error, line, message);
-    // std::process::exit(65); 
 }
 
 // reads text from source file and runs it
@@ -52,10 +49,7 @@ fn repl() -> Result<(), Box<dyn Error>> {
         let mut instruction = String::new();
         std::io::stdin().read_line(&mut instruction);
         if !instruction.trim().is_empty() {
-            let response = run(instruction);
-            if response.is_ok() {
-                // println!("{:?}", response.unwrap());
-            }
+            run(instruction);
         }
     }
     Ok(())

@@ -140,22 +140,26 @@ impl Div for Literal {
 
     fn div(self, right: Literal) -> Result<Literal, String> {
         match (self, right) {
-            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => Ok(Literal::NUMERIC(a / b)),
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => {
+                if b == 0.0 {
+                    Err(String::from("ZeroDivisionError"))
+                } else {
+                    Ok(Literal::NUMERIC(a / b))
+                }
+            },
             _ => Err(String::from("TypeError for operator /"))
         }
     }
 }
 
-/*
-impl ToString for Literal {
-    fn to_string(self) -> String {
+impl Literal {
+    pub fn get_type(self) -> String {
         match self {
-            Literal::NUMERIC(x) => String::from("numeric"),
-            Literal::BOOL(x) => String::from("bool"),
-            Literal::STRING(x) => String::from("string"),
-            Literal::NIL => String::from("nil"),
+            Literal::NUMERIC(_) => "numeric".to_string(),
+            Literal::STRING(_) => "string".to_string(),
+            Literal::BOOL(_) => "bool".to_string(),
+            Literal::NIL => "nil".to_string(),
         }
     }
 }
-*/
 
