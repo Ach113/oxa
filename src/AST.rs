@@ -297,4 +297,29 @@ impl Stmt for VarDeclaration {
     }
 }
 
+// assignment 
+pub struct Assignment {
+    var: Variable,
+    value: Box<dyn Expr>
+}
+
+impl Assignment {
+    pub fn new(var: Variable, value: Box<dyn Expr>) -> Self {
+        Assignment {var, value}
+    }
+}
+
+impl Stmt for Assignment {
+    fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
+        if !env.contains_key(&self.var.identifier) {
+            crate::error("NameError", &format!("Undefined variable {}", self.var.identifier.lexeme), self.var.identifier.line);
+            Err(())
+        } else {
+            let value = self.value.eval(&mut env).unwrap();
+            env.add(self.var.identifier.clone(), value);
+            Ok(())
+        }
+    }
+}
+
 

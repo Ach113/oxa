@@ -27,4 +27,8 @@ impl Environment {
             }
         }
     }
+
+    pub fn contains_key(&self, key: &Token) -> bool {
+        self.values.contains_key(&key.lexeme)
+    }
 }

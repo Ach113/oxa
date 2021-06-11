@@ -1,5 +1,6 @@
 use crate::tokens::{Token, TokenType};
-use crate::AST::{Expr, Binary, Unary, Grouping, Literal, Variable, Stmt, ExprStmt, PrintStmt, VarDeclaration};
+use crate::AST;
+use crate::AST::{Expr, Stmt};
 
 // operators supported by each type of expression
 const equalities: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
@@ -34,6 +35,15 @@ impl Parser {
 
     fn previous(&self) -> Token {
         self.tokens[(self.current - 1) as usize].clone()
+    }
+
+    // checks if passed tokentype matches next token
+    fn next(&self, t: TokenType) -> bool {
+        if self.at_end() {
+            false
+        } else {
+            self.tokens[(self.current + 1) as usize].t == t
+        }
     }
 
     // returns current token, increments index
@@ -89,7 +99,7 @@ impl Parser {
             return Err(());
         }
         // initial value of the variable (null)
-        let mut value: Box<dyn Expr> = Box::new(Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        let mut value: Box<dyn Expr> = Box::new(AST::Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
         // check if any assignment is being performed
         let equal_sign = self.consume(TokenType::EQUAL, "Expect assignment");
         if equal_sign.is_ok() {
@@ -104,7 +114,7 @@ impl Parser {
         // check for semicolon
         let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
         if res.is_ok() {
-            Ok(Box::new(VarDeclaration::new(identifier.unwrap(), value)))
+            Ok(Box::new(AST::VarDeclaration::new(identifier.unwrap(), value)))
         } else {
             Err(())
         }
@@ -114,7 +124,37 @@ impl Parser {
         let token = self.peek().t;
         match token {
             TokenType::PRINT => self.print_statement(),
-            _ => self.expression_stmt()
+            _ => {
+                if self.next(TokenType::EQUAL) {
+                    self.assignment()
+                } else {
+                    self.expression_stmt()
+                }
+            }
+        }
+    }
+
+    // var = new_val;
+    fn assignment(&mut self) -> Result<Box<dyn Stmt>, ()> {
+        let lhs = self.advance(); // should evaluate to variable
+        /*
+        if lhs.is_err() {
+            crate::error("SyntaxError", "Invalid lhs for assignment", self.peek().line);
+            return Err(());
+        }
+        */
+        // consume equal sign
+        self.advance();
+        let rhs = self.expression();
+        if rhs.is_err() {
+            crate::error("SyntaxError", "Invalid rhs for assignment", self.peek().line);
+            return Err(());
+        }
+        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
+        if res.is_ok() {
+            Ok(Box::new(AST::Assignment::new(AST::Variable::new(lhs.clone()), rhs.unwrap())))
+        } else {
+            Err(())
         }
     }
 
@@ -124,7 +164,7 @@ impl Parser {
         let expr = self.expression().unwrap();
         let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
         if res.is_ok() {
-            Ok(Box::new(PrintStmt::new(expr)))
+            Ok(Box::new(AST::PrintStmt::new(expr)))
         } else {
             Err(())
         }
@@ -134,7 +174,7 @@ impl Parser {
         let expr = self.expression().unwrap();
         let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
         if res.is_ok() {
-            Ok(Box::new(ExprStmt::new(expr)))
+            Ok(Box::new(AST::ExprStmt::new(expr)))
         } else {
             Err(())
         }
@@ -154,7 +194,7 @@ impl Parser {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.comparison() {
-                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
                     };
                 }
@@ -172,7 +212,7 @@ impl Parser {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.term() {
-                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
                     };
                 }
@@ -189,7 +229,7 @@ impl Parser {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.factor() {
-                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
                     };
                 }
@@ -206,7 +246,7 @@ impl Parser {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.unary() {
-                        Ok(right) => Box::new(Binary::new(operator, expr, right).unwrap()),
+                        Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
                     };
                 }
@@ -221,7 +261,7 @@ impl Parser {
             self.advance();
             let operator = self.previous();
             match self.unary() {
-                Ok(right) => return Ok(Box::new(Unary::new(operator, right).unwrap())),
+                Ok(right) => return Ok(Box::new(AST::Unary::new(operator, right).unwrap())),
                 Err(right) => return Err(right),
             }
         }
@@ -235,11 +275,11 @@ impl Parser {
     fn primary(&mut self) -> Result<Box<dyn Expr>, Error> {
         // literal types
         if vec![TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
-            return Ok(Box::new(Literal::new(self.advance()).unwrap()));
+            return Ok(Box::new(AST::Literal::new(self.advance()).unwrap()));
         }
         // variable
         if self.check_type(&TokenType::IDENTIFIER) {
-            return Ok(Box::new(Variable::new(self.advance())));
+            return Ok(Box::new(AST::Variable::new(self.advance())));
         }
 
         if self.check_type(&TokenType::LEFT_PAREN) {
@@ -248,7 +288,7 @@ impl Parser {
                 Ok(expr) => {
                     match self.consume(TokenType::RIGHT_PAREN, "Expected ')' after expression") {
                         Err(e) => return Err(e),
-                        _ => return Ok(Box::new(Grouping::new(expr))),
+                        _ => return Ok(Box::new(AST::Grouping::new(expr))),
                     };
                 },
                 Err(e) => return Err(e)
