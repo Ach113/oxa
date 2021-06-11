@@ -181,7 +181,7 @@ impl Scanner {
             // special case: '/' stands for division, while // stands for comment
             '/' => {
                 if (self.next('/')) {
-                    while !(self.is_eof() || self.cell() =='\n') { 
+                    while !(self.is_eof() || self.cell() == '\n') { 
                         self.current += 1;
                     }
                 } else if (self.next('*')) {

@@ -1,5 +1,5 @@
 use crate::tokens::{Token, TokenType};
-use crate::AST::{Expr, Binary, Unary, Grouping, Literal};
+use crate::AST::{Expr, Binary, Unary, Grouping, Literal, Variable, Stmt, ExprStmt, PrintStmt, VarDeclaration};
 
 // operators supported by each type of expression
 const equalities: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
@@ -50,6 +50,94 @@ impl Parser {
             return false;
         }
         self.peek().t == *t
+    }
+
+    /*** Statements ***/
+
+    pub fn parse(&mut self) -> Vec<Box<dyn Stmt>> {
+        let mut stmt_vec: Vec<Box<dyn Stmt>> = Vec::new();
+        // iterate until EOF
+        while !self.at_end() {
+            let stmt = self.declaration();
+            if stmt.is_ok() {
+                stmt_vec.push(stmt.unwrap());
+            }
+        }
+        stmt_vec
+    }
+
+    // variable, function or class declarations
+    fn declaration(&mut self) -> Result<Box<dyn Stmt>, ()> {
+        let keyword = self.peek().t;
+        let dec = match keyword {
+            TokenType::VAR => self.var_declaration(),
+            _ => self.statement()
+        };
+        if dec.is_err() {
+            self.synchronize();
+            Err(())
+        } else {
+            dec
+        }
+    }
+
+    // var identifier = expr;
+    fn var_declaration(&mut self) -> Result<Box<dyn Stmt>, ()> {
+        self.advance(); // consume var token
+        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier");
+        if identifier.is_err() {
+            return Err(());
+        }
+        // initial value of the variable (null)
+        let mut value: Box<dyn Expr> = Box::new(Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        // check if any assignment is being performed
+        let equal_sign = self.consume(TokenType::EQUAL, "Expect assignment");
+        if equal_sign.is_ok() {
+            let expr = self.expression();
+            if expr.is_err() {
+                crate::error("SyntaxError", "Invalid variable assignment", self.previous().line);
+                return Err(());
+            } else {
+                value = expr.unwrap();
+            }
+        }
+        // check for semicolon
+        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
+        if res.is_ok() {
+            Ok(Box::new(VarDeclaration::new(identifier.unwrap(), value)))
+        } else {
+            Err(())
+        }
+    }
+
+    fn statement(&mut self) -> Result<Box<dyn Stmt>, ()> {
+        let token = self.peek().t;
+        match token {
+            TokenType::PRINT => self.print_statement(),
+            _ => self.expression_stmt()
+        }
+    }
+
+    // print expr;
+    fn print_statement(&mut self) -> Result<Box<dyn Stmt>, ()> {
+        self.advance(); // consume print token
+        let expr = self.expression().unwrap();
+        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
+        if res.is_ok() {
+            Ok(Box::new(PrintStmt::new(expr)))
+        } else {
+            Err(())
+        }
+    }
+
+    fn expression_stmt(&mut self) -> Result<Box<dyn Stmt>, ()> {
+        let expr = self.expression().unwrap();
+        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
+        if res.is_ok() {
+            Ok(Box::new(ExprStmt::new(expr)))
+        } else {
+            Err(())
+        }
     }
 
     /*** Expressions ***/
@@ -145,8 +233,13 @@ impl Parser {
 
     // either returns literal value of the expression or another expression wrapped in parentheses
     fn primary(&mut self) -> Result<Box<dyn Expr>, Error> {
-        if vec![TokenType::IDENTIFIER, TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
+        // literal types
+        if vec![TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
             return Ok(Box::new(Literal::new(self.advance()).unwrap()));
+        }
+        // variable
+        if self.check_type(&TokenType::IDENTIFIER) {
+            return Ok(Box::new(Variable::new(self.advance())));
         }
 
         if self.check_type(&TokenType::LEFT_PAREN) {
@@ -168,10 +261,9 @@ impl Parser {
 
     /*** methods for error handling ***/
 
-    fn consume(&mut self, t: TokenType, message: &str) -> Result<(), Error> {
+    fn consume(&mut self, t: TokenType, message: &str) -> Result<Token, Error> {
         if self.check_type(&t) {
-            self.advance();
-            Ok(())
+            Ok(self.advance())
         } else {
             crate::error("Syntax error", message, self.previous().line);
             Err(message.into())
