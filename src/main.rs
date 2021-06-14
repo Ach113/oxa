@@ -1,5 +1,4 @@
 use std::env;
-use std::fs::File;
 use std::io::Write;
 use std::error::Error;
 
@@ -15,6 +14,7 @@ use scanner::Scanner;
 use parser::Parser;
 use tokens::Literal;
 use interpreter::interpret;
+use environment::Environment;
 
 // executes given instruction/set of instructions
 fn run(code: String) -> Result<(), ()> {
@@ -26,7 +26,8 @@ fn run(code: String) -> Result<(), ()> {
     // get list of statements from the parser
     let statements = parser.parse();
     // execute the statements
-    interpret(statements)
+    let mut environment = Environment::new(None);
+    interpret(&statements, &mut environment)
 }
 
 // function used to report errors to the user

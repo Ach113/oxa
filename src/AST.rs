@@ -1,5 +1,6 @@
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
+use crate::interpreter::interpret;
 use std::fmt;
 
 /* Expression */
@@ -36,6 +37,13 @@ pub struct Grouping {
 pub struct Variable {
     identifier: Token
 }
+
+// variable assignment
+pub struct Assignment {
+    var: Variable,
+    value: Box<dyn Expr>
+}
+
 
 /*** eval implementations ***/
 
@@ -156,7 +164,7 @@ impl Expr for Unary {
 }
 
 impl Expr for Literal {
-    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
         Ok(self.value.literal.clone())
     }
 }
@@ -168,8 +176,18 @@ impl Expr for Grouping {
 } 
 
 impl Expr for Variable {
-    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
         env.get(self.identifier.clone())
+    }
+}
+
+impl Expr for Assignment {
+    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
+        let value = self.value.eval(&mut env);
+        match value {
+            Ok(x) => env.assign(self.var.identifier.clone(), x.clone()),
+            Err(e) => Err(e)
+        }
     }
 }
 
@@ -223,6 +241,12 @@ impl Literal {
 impl Variable {
     pub fn new(identifier: Token) -> Variable {
         Variable {identifier}
+    }
+}
+
+impl Assignment {
+    pub fn new(var: Variable, value: Box<dyn Expr>) -> Self {
+        Assignment {var, value}
     }
 }
 
@@ -291,10 +315,33 @@ impl VarDeclaration {
 
 impl Stmt for VarDeclaration {
     fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
-        let value = self.value.eval(&mut env).unwrap();
-        env.add(self.identifier.clone(), value);
-        Ok(())
+        let value = self.value.eval(&mut env);
+        match value {
+            Ok(x) => env.add(self.identifier.clone(), x),
+            Err(e) => Err(e)
+        }
     }
 }
+
+// block statement
+pub struct BlockStmt {
+    statements: Vec<Box<dyn Stmt>>,
+}
+
+impl BlockStmt {
+    pub fn new(statements: Vec<Box<dyn Stmt>>) -> Self {
+        BlockStmt {statements}
+    }
+}
+
+impl Stmt for BlockStmt {
+    fn eval(&self, env: &mut Environment) -> Result<(), ()> {
+        //let mut enclosed_env = Environment::new(Some(Box::new(*env)));
+        todo!();
+        //interpret(&self.statements, &mut enclosed_env)
+    }
+}
+
+
 
 
