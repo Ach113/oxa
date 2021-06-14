@@ -68,6 +68,7 @@ impl Parser {
         let mut stmt_vec: Vec<Box<dyn Stmt>> = Vec::new();
         // iterate until EOF
         while !self.at_end() {
+            // declarations have highest precendance
             let stmt = self.declaration();
             if stmt.is_ok() {
                 stmt_vec.push(stmt.unwrap());
@@ -77,21 +78,23 @@ impl Parser {
     }
 
     // variable, function or class declarations
+    // otherwise matches other statement types
     fn declaration(&mut self) -> Result<Box<dyn Stmt>, ()> {
         let keyword = self.peek().t;
         let dec = match keyword {
             TokenType::VAR => self.var_declaration(),
             _ => self.statement()
         };
-        if dec.is_err() {
-            self.synchronize();
-            Err(())
-        } else {
-            dec
+        match dec {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                self.synchronize();
+                Err(e)
+            }
         }
     }
 
-    // var identifier = expr;
+    // var identifier = expr; | var identifier;
     fn var_declaration(&mut self) -> Result<Box<dyn Stmt>, ()> {
         self.advance(); // consume var token
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier");
@@ -101,8 +104,8 @@ impl Parser {
         // initial value of the variable (null)
         let mut value: Box<dyn Expr> = Box::new(AST::Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
         // check if any assignment is being performed
-        let equal_sign = self.consume(TokenType::EQUAL, "Expect assignment");
-        if equal_sign.is_ok() {
+        if self.check_type(&TokenType::EQUAL) {
+            self.advance(); // consume "=" token
             let expr = self.expression();
             if expr.is_err() {
                 crate::error("SyntaxError", "Invalid variable assignment", self.previous().line);
@@ -124,37 +127,31 @@ impl Parser {
         let token = self.peek().t;
         match token {
             TokenType::PRINT => self.print_statement(),
-            _ => {
-                if self.next(TokenType::EQUAL) {
-                    self.assignment()
-                } else {
-                    self.expression_stmt()
+            TokenType::LEFT_BRACE => {
+                match self.block_statement() {
+                    Ok(stmts) => Ok(Box::new(AST::BlockStmt::new(stmts))),
+                    Err(e) => Err(()),
                 }
-            }
+            },
+            _ => self.expression_stmt()
         }
     }
 
-    // var = new_val;
-    fn assignment(&mut self) -> Result<Box<dyn Stmt>, ()> {
-        let lhs = self.advance(); // should evaluate to variable
-        /*
-        if lhs.is_err() {
-            crate::error("SyntaxError", "Invalid lhs for assignment", self.peek().line);
-            return Err(());
+    // { declaration* }
+    fn block_statement(&mut self) -> Result<Vec<Box<dyn Stmt>>, ()> {
+        let mut statements:Vec<Box<dyn Stmt>> = Vec::new();
+
+        while (!self.at_end() && !self.check_type(&TokenType::RIGHT_BRACE)) {
+            let stmt = self.declaration();
+            if stmt.is_err() {
+                return Err(());
+            }
+            statements.push(self.declaration().unwrap());
         }
-        */
-        // consume equal sign
-        self.advance();
-        let rhs = self.expression();
-        if rhs.is_err() {
-            crate::error("SyntaxError", "Invalid rhs for assignment", self.peek().line);
-            return Err(());
-        }
-        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
-        if res.is_ok() {
-            Ok(Box::new(AST::Assignment::new(AST::Variable::new(lhs.clone()), rhs.unwrap())))
-        } else {
-            Err(())
+
+        match self.consume(TokenType::RIGHT_BRACE, "Expect '}' after block") {
+            Ok(x) => Ok(statements),
+            Err(e) => Err(())
         }
     }
 
@@ -183,7 +180,28 @@ impl Parser {
     /*** Expressions ***/
 
     pub fn expression(&mut self) -> Result<Box<dyn Expr>, Error> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Box<dyn Expr>, Error> {
+        if self.next(TokenType::EQUAL) {
+            let lhs = self.advance(); // target variable
+            if lhs.t != TokenType::IDENTIFIER {
+                crate::error("SyntaxError", "invalid target variable for assignment", lhs.line);
+                Err("".into())
+            } else {
+                self.advance(); // consume "=" token
+                let rhs = self.assignment();
+                if rhs.is_err() {
+                    crate::error("SyntaxError", "invalid rhs for assignment", lhs.line);
+                    Err("".into())
+                } else {
+                    Ok(Box::new(AST::Assignment::new(AST::Variable::new(lhs.clone()), rhs.unwrap())))
+                }
+            }
+        } else {
+            self.equality()
+        }
     }
 
     // expression with lowest precendence
