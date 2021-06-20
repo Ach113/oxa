@@ -27,7 +27,10 @@ fn run(code: String) -> Result<(), ()> {
     let statements = parser.parse();
     // execute the statements
     let mut environment = Environment::new(None);
-    interpret(&statements, &mut environment)
+    match interpret(&statements, &mut environment) {
+        Ok(_) => Ok(()),
+        _ => Err(()),
+    }
 }
 
 // function used to report errors to the user

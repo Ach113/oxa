@@ -1,16 +1,22 @@
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::fmt;
 
 use crate::tokens::{Token, Literal};
 
+#[derive(Clone, Debug)]
 pub struct Environment {
-    enclosing: Option<Box<Environment>>, // for global scope this field is None
-    values: HashMap<String, Literal>,
+    pub enclosing: Option<Box<Environment>>, // for global scope this field is None
+    pub values: HashMap<String, Literal>,
 }
 
 impl Environment {
     pub fn new(enclosing: Option<Box<Environment>>) -> Self {
         let values: HashMap<String, Literal> = HashMap::new();
-        Environment {enclosing, values}
+        match enclosing {
+            None => Environment {enclosing: None, values},
+            Some(e) => Environment {enclosing: Some(e), values},
+        }
     }
 
     pub fn add(&mut self, identifier: Token, value: Literal) -> Result<(), ()> {
@@ -23,11 +29,10 @@ impl Environment {
         Ok(())
     }
 
-    pub fn assign(&mut self, identifier: Token, value: Literal) -> Result<Literal, ()> {
-        let name = &identifier.lexeme;
-        if self.values.contains_key(name) {
-            self.values.insert(name.to_string(), value.clone());
-            return Ok(value)
+    pub fn assign(&mut self, identifier: String, value: Literal) -> Result<Literal, ()> {
+        if self.values.contains_key(&identifier) {
+            self.values.insert(identifier, value.clone());
+            return Ok(value);
         } else {
             match (&mut self.enclosing) {
                 Some(env) => env.assign(identifier.clone(), value.clone()),
@@ -53,7 +58,16 @@ impl Environment {
         }
     }
 
-    pub fn contains_key(&self, key: &Token) -> bool {
-        self.values.contains_key(&key.lexeme)
+    pub fn contains_key(&self, key: &String) -> bool {
+        self.values.contains_key(key)
+    }
+}
+
+impl fmt::Display for Environment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.enclosing {
+            Some(env) => write!(f, "{:?} | ({})", self.values, *env),
+            None => write!(f, "{:?} | None", self.values),
+        }
     }
 }

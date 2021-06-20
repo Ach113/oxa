@@ -1,7 +1,9 @@
+use std::fmt;
+use std::cell::RefCell;
+
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
 use crate::interpreter::interpret;
-use std::fmt;
 
 /* Expression */
 
@@ -185,7 +187,7 @@ impl Expr for Assignment {
     fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
         let value = self.value.eval(&mut env);
         match value {
-            Ok(x) => env.assign(self.var.identifier.clone(), x.clone()),
+            Ok(x) => env.assign(self.var.identifier.lexeme.clone(), x.clone()),
             Err(e) => Err(e)
         }
     }
@@ -335,10 +337,28 @@ impl BlockStmt {
 }
 
 impl Stmt for BlockStmt {
-    fn eval(&self, env: &mut Environment) -> Result<(), ()> {
-        //let mut enclosed_env = Environment::new(Some(Box::new(*env)));
-        todo!();
-        //interpret(&self.statements, &mut enclosed_env)
+    fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
+        let mut enclosed_env = Environment::new(Some(Box::new(env.clone())));
+        match interpret(&self.statements, &mut enclosed_env) {
+            Ok(e) => {
+                // synchronize outer scope with the inner
+                println!("{}", e);
+                let mut inner = *(e.enclosing.unwrap());
+                loop {
+                    for (key, item) in inner.values {
+                        if env.contains_key(&key) {
+                            env.assign(key.clone(), item.clone());
+                        }
+                    }
+                    match inner.enclosing {
+                        Some(x) => inner = *x,
+                        _ => break,
+                    }
+                } 
+                Ok(())
+            },
+            Err(_) => Err(()),
+        }
     }
 }
 
