@@ -11,6 +11,7 @@ mod AST;
 mod parser;
 mod environment;
 mod interpreter;
+mod tests;
 
 use scanner::Scanner;
 use parser::Parser;

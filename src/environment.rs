@@ -60,3 +60,12 @@ impl Environment {
         self.values.contains_key(key)
     }
 }
+
+impl fmt::Display for Environment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.enclosing {
+            None => write!(f, "{:?} | None", self.values),
+            Some(env) => write!(f,"{:?} | ({})", self.values, env.borrow()),
+        }
+    }
+}

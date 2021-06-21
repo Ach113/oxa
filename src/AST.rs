@@ -338,8 +338,8 @@ impl BlockStmt {
 
 impl Eval for BlockStmt {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
-        let mut enclosed_env = Environment::new(Some(env));
-        interpret(&self.statements, Rc::new(RefCell::new(enclosed_env)))
+        let mut enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
+        interpret(&self.statements, enclosing)
     }
 }
 

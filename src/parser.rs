@@ -129,7 +129,10 @@ impl Parser {
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
                     Ok(stmts) => Ok(Box::new(AST::BlockStmt::new(stmts))),
-                    Err(e) => Err(()),
+                    Err(e) => {
+                        crate::error("SyntaxError", "invalid body of block statement", self.peek().line);
+                        Err(())
+                    },
                 }
             },
             _ => self.expression_stmt()
@@ -145,7 +148,7 @@ impl Parser {
         while !(self.at_end() || self.check_type(&TokenType::RIGHT_BRACE)) {
             match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
-                Err(_) => return Err(()),
+                Err(e) => return Err(()),
             }
         }
 
@@ -169,18 +172,14 @@ impl Parser {
 
     fn expression_stmt(&mut self) -> Result<Box<dyn Eval>, ()> {
         match self.expression() {
-            Err(_) => Err(()),
-            Ok(expr) => Ok(Box::new(AST::ExprStmt::new(expr))),
+            Err(e) => Err(()),
+            Ok(expr) => {
+                if self.check_type(&TokenType::SEMICOLON) {
+                    self.advance();
+                }
+                Ok(Box::new(AST::ExprStmt::new(expr)))
+            },
         }
-        /*
-        let expr = self.expression().unwrap();
-        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
-        if res.is_ok() {
-            Ok(Box::new(AST::ExprStmt::new(expr)))
-        } else {
-            Err(())
-        }
-        */
     }
 
     /*** Expressions ***/
@@ -306,6 +305,18 @@ impl Parser {
             return Ok(Box::new(AST::Variable::new(self.advance())));
         }
 
+        // braces
+        if self.check_type(&TokenType::LEFT_BRACE) {
+            match self.block_statement() {
+                Ok(stmts) => return Ok(Box::new(AST::BlockStmt::new(stmts))),
+                Err(e) => {
+                    crate::error("SyntaxError", "invalid body of block statement", self.peek().line);
+                    return Err("Invalid Expression".into());
+                },
+            }
+        }
+
+        // parenthesis
         if self.check_type(&TokenType::LEFT_PAREN) {
             self.advance();
             match self.expression() {
