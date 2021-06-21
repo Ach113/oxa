@@ -1,6 +1,8 @@
 use std::env;
 use std::io::Write;
 use std::error::Error;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 // modules made by yours truly
 mod tokens;
@@ -17,7 +19,7 @@ use interpreter::interpret;
 use environment::Environment;
 
 // executes given instruction/set of instructions
-fn run(code: String) -> Result<(), ()> {
+fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<(), ()> {
     let mut scanner = Scanner::new(code);
     // scan scource code for tokens
     let tokens = scanner.scan_tokens();
@@ -26,8 +28,7 @@ fn run(code: String) -> Result<(), ()> {
     // get list of statements from the parser
     let statements = parser.parse();
     // execute the statements
-    let mut environment = Environment::new(None);
-    match interpret(&statements, &mut environment) {
+    match interpret(&statements, env) {
         Ok(_) => Ok(()),
         _ => Err(()),
     }
@@ -41,19 +42,21 @@ fn error(error: &str, message: &str, line: u64) {
 // reads text from source file and runs it
 fn runfile(filename: &str) -> Result<(), Box<dyn Error>> {
     let code = std::fs::read_to_string(filename).unwrap();
-    run(code);
+    let env = Rc::new(RefCell::new(Environment::new(None)));
+    run(code, env);
     Ok(())
 }
 
 // Read a line of input, Evaluate it, Print the result, then Loop
 fn repl() -> Result<(), Box<dyn Error>> {
+    let env = Rc::new(RefCell::new(Environment::new(None)));
     loop {
         print!(">> ");
         std::io::stdout().flush()?; // necessary due to line-buffering of stdout
         let mut instruction = String::new();
         std::io::stdin().read_line(&mut instruction);
         if !instruction.trim().is_empty() {
-            run(instruction);
+            run(instruction, env.clone());
         }
     }
     Ok(())

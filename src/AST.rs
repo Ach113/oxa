@@ -1,5 +1,6 @@
 use std::fmt;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
@@ -9,7 +10,7 @@ use crate::interpreter::interpret;
 
 // generic expression trait
 pub trait Expr {
-    fn eval(&self, env: &mut Environment) -> Result<crate::tokens::Literal, ()>;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()>;
 }
 
 // binary expression
@@ -50,10 +51,10 @@ pub struct Assignment {
 /*** eval implementations ***/
 
 impl Expr for Binary {
-    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let op = &self.operator.lexeme;
-        let left = self.left.eval(&mut env);
-        let right = self.right.eval(&mut env);
+        let left = self.left.eval(env.clone());
+        let right = self.right.eval(env.clone());
         if left.is_err() || right.is_err() {
             return Err(());
         }
@@ -131,9 +132,9 @@ impl Expr for Binary {
 }
 
 impl Expr for Unary {
-    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let op = &self.operator.lexeme;
-        let expr = self.expression.eval(&mut env);
+        let expr = self.expression.eval(env.clone());
         if expr.is_err() {
             return Err(());
         }
@@ -166,28 +167,28 @@ impl Expr for Unary {
 }
 
 impl Expr for Literal {
-    fn eval(&self, env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         Ok(self.value.literal.clone())
     }
 }
 
 impl Expr for Grouping {
-    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
-        self.expression.eval(&mut env)
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        self.expression.eval(env)
     }
 } 
 
 impl Expr for Variable {
-    fn eval(&self, env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
-        env.get(self.identifier.clone())
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        env.borrow().get(self.identifier.clone())
     }
 }
 
 impl Expr for Assignment {
-    fn eval(&self, mut env: &mut Environment) -> Result<crate::tokens::Literal, ()> {
-        let value = self.value.eval(&mut env);
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        let value = self.value.eval(env.clone());
         match value {
-            Ok(x) => env.assign(self.var.identifier.lexeme.clone(), x.clone()),
+            Ok(x) => env.borrow_mut().assign(self.var.identifier.lexeme.clone(), x.clone()),
             Err(e) => Err(e)
         }
     }
@@ -255,7 +256,7 @@ impl Assignment {
 /* Statements */
 
 pub trait Stmt {
-    fn eval(&self, env: &mut Environment) -> Result<(), ()>;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<(), ()>;
 }
 
 // An expression statement is one that evaluates an expression and ignores its result
@@ -270,8 +271,8 @@ impl ExprStmt {
 }
 
 impl Stmt for ExprStmt {
-    fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
-        let res = self.body.eval(&mut env);
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+        let res = self.body.eval(env);
         if res.is_err() {
             Err(())
         } else {
@@ -292,8 +293,8 @@ impl PrintStmt {
 }
 
 impl Stmt for PrintStmt {
-    fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
-        let val = self.value.eval(&mut env);
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+        let val = self.value.eval(env);
         if val.is_ok() {
             println!("{}", val.unwrap());
             Ok(())
@@ -316,10 +317,10 @@ impl VarDeclaration {
 }
 
 impl Stmt for VarDeclaration {
-    fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
-        let value = self.value.eval(&mut env);
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+        let value = self.value.eval(env.clone());
         match value {
-            Ok(x) => env.add(self.identifier.clone(), x),
+            Ok(x) => env.borrow_mut().add(self.identifier.clone(), x),
             Err(e) => Err(e)
         }
     }
@@ -337,28 +338,9 @@ impl BlockStmt {
 }
 
 impl Stmt for BlockStmt {
-    fn eval(&self, mut env: &mut Environment) -> Result<(), ()> {
-        let mut enclosed_env = Environment::new(Some(Box::new(env.clone())));
-        match interpret(&self.statements, &mut enclosed_env) {
-            Ok(e) => {
-                // synchronize outer scope with the inner
-                println!("{}", e);
-                let mut inner = *(e.enclosing.unwrap());
-                loop {
-                    for (key, item) in inner.values {
-                        if env.contains_key(&key) {
-                            env.assign(key.clone(), item.clone());
-                        }
-                    }
-                    match inner.enclosing {
-                        Some(x) => inner = *x,
-                        _ => break,
-                    }
-                } 
-                Ok(())
-            },
-            Err(_) => Err(()),
-        }
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+        let mut enclosed_env = Environment::new(Some(env));
+        interpret(&self.statements, Rc::new(RefCell::new(enclosed_env)))
     }
 }
 
