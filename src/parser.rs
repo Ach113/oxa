@@ -25,7 +25,7 @@ impl Parser {
 
     // checks if parser has reached the end
     fn at_end(&self) -> bool {
-        (self.current as usize) == self.tokens.len() 
+        (self.current as usize) == self.tokens.len()
     }
 
     // returns token at index "current"
@@ -39,7 +39,7 @@ impl Parser {
 
     // checks if passed tokentype matches next token
     fn next(&self, t: TokenType) -> bool {
-        if self.at_end() {
+        if (self.current as usize) >= self.tokens.len() - 1 {
             false
         } else {
             self.tokens[(self.current + 1) as usize].t == t
@@ -124,8 +124,7 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Box<dyn Stmt>, ()> {
-        let token = self.peek().t;
-        match token {
+        match self.peek().t {
             TokenType::PRINT => self.print_statement(),
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
@@ -139,14 +138,15 @@ impl Parser {
 
     // { declaration* }
     fn block_statement(&mut self) -> Result<Vec<Box<dyn Stmt>>, ()> {
+        self.advance(); // consume '{'
+
         let mut statements:Vec<Box<dyn Stmt>> = Vec::new();
 
-        while (!self.at_end() && !self.check_type(&TokenType::RIGHT_BRACE)) {
-            let stmt = self.declaration();
-            if stmt.is_err() {
-                return Err(());
+        while !(self.at_end() || self.check_type(&TokenType::RIGHT_BRACE)) {
+            match self.declaration() {
+                Ok(stmt) => statements.push(stmt),
+                Err(_) => return Err(()),
             }
-            statements.push(self.declaration().unwrap());
         }
 
         match self.consume(TokenType::RIGHT_BRACE, "Expect '}' after block") {
@@ -311,10 +311,9 @@ impl Parser {
                 },
                 Err(e) => return Err(e)
             }
-            
         }
         // this line is not supposed to execute
-        Err("Expected expression".into())
+        Err(format!("Expected expression, got {}", self.peek()).into())
     }
 
     /*** methods for error handling ***/

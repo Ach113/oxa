@@ -1,16 +1,23 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use crate::AST::Stmt;
 use crate::environment::Environment;
+use crate::AST::Literal;
+use crate::tokens::{TokenType, Token};
 
-pub fn interpret(statements: &Vec<Box<dyn Stmt>>, mut env: &mut Environment) -> Result<(), ()> {
-    let mut error: Result<(), ()> = Ok(()); // signals whether code execution was successful
-    let mut error_count = 0;
+pub fn interpret(statements: &Vec<Box<dyn Stmt>>, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+    let mut error_count: u32 = 0;
 
     for stmt in statements {
-        let res = stmt.eval(&mut env);
-        if res.is_err() {
-            error = Err(());
-            error_count += 1;
-        }
+        match stmt.eval(env.clone()) {
+            Err(_) => error_count += 1,
+            Ok(_) => {},
+        };
     }
-    error
+    if error_count > 0 {
+        Err(())
+    } else {
+        Ok(())
+    }
 }

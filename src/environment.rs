@@ -1,14 +1,18 @@
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::fmt;
 
 use crate::tokens::{Token, Literal};
 
+#[derive(Debug)]
 pub struct Environment {
-    enclosing: Option<Box<Environment>>, // for global scope this field is None
-    values: HashMap<String, Literal>,
+    pub enclosing: Option<Rc<RefCell<Environment>>>, // for global scope this field is None
+    pub values: HashMap<String, Literal>,
 }
 
 impl Environment {
-    pub fn new(enclosing: Option<Box<Environment>>) -> Self {
+    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
         let values: HashMap<String, Literal> = HashMap::new();
         Environment {enclosing, values}
     }
@@ -23,14 +27,13 @@ impl Environment {
         Ok(())
     }
 
-    pub fn assign(&mut self, identifier: Token, value: Literal) -> Result<Literal, ()> {
-        let name = &identifier.lexeme;
-        if self.values.contains_key(name) {
-            self.values.insert(name.to_string(), value.clone());
-            return Ok(value)
+    pub fn assign(&mut self, identifier: String, value: Literal) -> Result<Literal, ()> {
+        if self.values.contains_key(&identifier) {
+            self.values.insert(identifier, value.clone());
+            return Ok(value);
         } else {
             match (&mut self.enclosing) {
-                Some(env) => env.assign(identifier.clone(), value.clone()),
+                Some(env) => env.borrow_mut().assign(identifier.clone(), value.clone()),
                 None => Err(()),
             }
         }
@@ -43,7 +46,7 @@ impl Environment {
             Some(x) => Ok(x.clone()),
             None => {
                 match &self.enclosing {
-                    Some(env) => env.get(identifier.clone()),
+                    Some(env) => env.borrow().get(identifier.clone()),
                     None => {
                         crate::error("NameError", &format!("Undefined variable '{}'", name), identifier.line);
                         Err(())
@@ -53,7 +56,7 @@ impl Environment {
         }
     }
 
-    pub fn contains_key(&self, key: &Token) -> bool {
-        self.values.contains_key(&key.lexeme)
+    pub fn contains_key(&self, key: &String) -> bool {
+        self.values.contains_key(key)
     }
 }
