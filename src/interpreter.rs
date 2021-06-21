@@ -1,23 +1,24 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use crate::AST::Stmt;
+use crate::AST::Eval;
 use crate::environment::Environment;
-use crate::AST::Literal;
+use crate::tokens::Literal;
 use crate::tokens::{TokenType, Token};
 
-pub fn interpret(statements: &Vec<Box<dyn Stmt>>, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+pub fn interpret(statements: &Vec<Box<dyn Eval>>, mut env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
     let mut error_count: u32 = 0;
+    let mut res = Literal::NIL;
 
     for stmt in statements {
         match stmt.eval(env.clone()) {
             Err(_) => error_count += 1,
-            Ok(_) => {},
-        };
+            Ok(x) => res = x,
+        }
     }
     if error_count > 0 {
         Err(())
     } else {
-        Ok(())
+        Ok(res)
     }
 }
