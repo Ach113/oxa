@@ -1,6 +1,6 @@
 use crate::tokens::{Token, TokenType};
 use crate::AST;
-use crate::AST::{Expr, Stmt};
+use crate::AST::Eval;
 
 // operators supported by each type of expression
 const equalities: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
@@ -64,8 +64,8 @@ impl Parser {
 
     /*** Statements ***/
 
-    pub fn parse(&mut self) -> Vec<Box<dyn Stmt>> {
-        let mut stmt_vec: Vec<Box<dyn Stmt>> = Vec::new();
+    pub fn parse(&mut self) -> Vec<Box<dyn Eval>> {
+        let mut stmt_vec: Vec<Box<dyn Eval>> = Vec::new();
         // iterate until EOF
         while !self.at_end() {
             // declarations have highest precendance
@@ -79,7 +79,7 @@ impl Parser {
 
     // variable, function or class declarations
     // otherwise matches other statement types
-    fn declaration(&mut self) -> Result<Box<dyn Stmt>, ()> {
+    fn declaration(&mut self) -> Result<Box<dyn Eval>, ()> {
         let keyword = self.peek().t;
         let dec = match keyword {
             TokenType::VAR => self.var_declaration(),
@@ -95,14 +95,14 @@ impl Parser {
     }
 
     // var identifier = expr; | var identifier;
-    fn var_declaration(&mut self) -> Result<Box<dyn Stmt>, ()> {
+    fn var_declaration(&mut self) -> Result<Box<dyn Eval>, ()> {
         self.advance(); // consume var token
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier");
         if identifier.is_err() {
             return Err(());
         }
         // initial value of the variable (null)
-        let mut value: Box<dyn Expr> = Box::new(AST::Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
         // check if any assignment is being performed
         if self.check_type(&TokenType::EQUAL) {
             self.advance(); // consume "=" token
@@ -123,7 +123,7 @@ impl Parser {
         }
     }
 
-    fn statement(&mut self) -> Result<Box<dyn Stmt>, ()> {
+    fn statement(&mut self) -> Result<Box<dyn Eval>, ()> {
         match self.peek().t {
             TokenType::PRINT => self.print_statement(),
             TokenType::LEFT_BRACE => {
@@ -137,10 +137,10 @@ impl Parser {
     }
 
     // { declaration* }
-    fn block_statement(&mut self) -> Result<Vec<Box<dyn Stmt>>, ()> {
+    fn block_statement(&mut self) -> Result<Vec<Box<dyn Eval>>, ()> {
         self.advance(); // consume '{'
 
-        let mut statements:Vec<Box<dyn Stmt>> = Vec::new();
+        let mut statements:Vec<Box<dyn Eval>> = Vec::new();
 
         while !(self.at_end() || self.check_type(&TokenType::RIGHT_BRACE)) {
             match self.declaration() {
@@ -156,7 +156,7 @@ impl Parser {
     }
 
     // print expr;
-    fn print_statement(&mut self) -> Result<Box<dyn Stmt>, ()> {
+    fn print_statement(&mut self) -> Result<Box<dyn Eval>, ()> {
         self.advance(); // consume print token
         let expr = self.expression().unwrap();
         let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
@@ -167,7 +167,12 @@ impl Parser {
         }
     }
 
-    fn expression_stmt(&mut self) -> Result<Box<dyn Stmt>, ()> {
+    fn expression_stmt(&mut self) -> Result<Box<dyn Eval>, ()> {
+        match self.expression() {
+            Err(_) => Err(()),
+            Ok(expr) => Ok(Box::new(AST::ExprStmt::new(expr))),
+        }
+        /*
         let expr = self.expression().unwrap();
         let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
         if res.is_ok() {
@@ -175,15 +180,16 @@ impl Parser {
         } else {
             Err(())
         }
+        */
     }
 
     /*** Expressions ***/
 
-    pub fn expression(&mut self) -> Result<Box<dyn Expr>, Error> {
+    pub fn expression(&mut self) -> Result<Box<dyn Eval>, Error> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn assignment(&mut self) -> Result<Box<dyn Eval>, Error> {
         if self.next(TokenType::EQUAL) {
             let lhs = self.advance(); // target variable
             if lhs.t != TokenType::IDENTIFIER {
@@ -205,7 +211,7 @@ impl Parser {
     }
 
     // expression with lowest precendence
-    fn equality(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn equality(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.comparison() {
             Ok(mut expr) => {
                 while equalities.iter().any(|x| self.check_type(x)) {
@@ -223,7 +229,7 @@ impl Parser {
     }
 
     // since term expressions are also binary, this code looks identical to that of equality(), albeit with lower precendence
-    fn comparison(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn comparison(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.term() {
             Ok(mut expr) => {
                 while comparisons.iter().any(|x| self.check_type(x)) {
@@ -240,7 +246,7 @@ impl Parser {
         }
     }
 
-    fn term(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn term(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.factor() {
             Ok(mut expr) => {
                 while terms.iter().any(|x| self.check_type(x)) {
@@ -257,7 +263,7 @@ impl Parser {
         }
     }
 
-    fn factor(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn factor(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.unary() {
             Ok(mut expr) => {
                 while factors.iter().any(|x| self.check_type(x)) {
@@ -274,7 +280,7 @@ impl Parser {
         }
     }
 
-    fn unary(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn unary(&mut self) -> Result<Box<dyn Eval>, Error> {
         if unaries.iter().any(|x| self.check_type(x)) {
             self.advance();
             let operator = self.previous();
@@ -290,7 +296,7 @@ impl Parser {
     }
 
     // either returns literal value of the expression or another expression wrapped in parentheses
-    fn primary(&mut self) -> Result<Box<dyn Expr>, Error> {
+    fn primary(&mut self) -> Result<Box<dyn Eval>, Error> {
         // literal types
         if vec![TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
             return Ok(Box::new(AST::Literal::new(self.advance()).unwrap()));

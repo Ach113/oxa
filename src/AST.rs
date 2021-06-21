@@ -9,31 +9,31 @@ use crate::interpreter::interpret;
 /* Expression */
 
 // generic expression trait
-pub trait Expr {
+pub trait Eval {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()>;
 }
 
 // binary expression
 pub struct Binary {
-    left: Box<dyn Expr>,
-    right: Box<dyn Expr>,
+    left: Box<dyn Eval>,
+    right: Box<dyn Eval>,
     operator: Token,
 }
 
 // unary expression
 pub struct Unary {
-    expression: Box<dyn Expr>,
+    expression: Box<dyn Eval>,
     operator: Token,
 }
 
 // literal expression
 pub struct Literal {
-    value: Token
+    value: crate::tokens::Literal
 }
 
 // grouping expression
 pub struct Grouping {
-    expression: Box<dyn Expr>,
+    expression: Box<dyn Eval>,
 }
 
 // variable expression
@@ -44,13 +44,13 @@ pub struct Variable {
 // variable assignment
 pub struct Assignment {
     var: Variable,
-    value: Box<dyn Expr>
+    value: Box<dyn Eval>
 }
 
 
 /*** eval implementations ***/
 
-impl Expr for Binary {
+impl Eval for Binary {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let op = &self.operator.lexeme;
         let left = self.left.eval(env.clone());
@@ -131,17 +131,17 @@ impl Expr for Binary {
     }
 }
 
-impl Expr for Unary {
+impl Eval for Unary {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let op = &self.operator.lexeme;
         let expr = self.expression.eval(env.clone());
         if expr.is_err() {
             return Err(());
         }
-        let expr = expr.unwrap();
+        let Eval = expr.unwrap();
         match &**op {
             "-" => {
-                match expr {
+                match Eval {
                     crate::tokens::Literal::NUMERIC(x) => Ok(crate::tokens::Literal::NUMERIC(-x)),
                     _ => {
                         crate::error("Parsing error", &format!("invalid right hand side expression for operator {}", op), self.operator.line);  
@@ -150,7 +150,7 @@ impl Expr for Unary {
                 }
             },
             "!" => {
-                match expr {
+                match Eval {
                     crate::tokens::Literal::BOOL(x) => Ok(crate::tokens::Literal::BOOL(!x)),
                     _ => {
                         crate::error("Parsing error", &format!("invalid right hand side expression for operator {}", op), self.operator.line);   
@@ -166,25 +166,25 @@ impl Expr for Unary {
     }
 }
 
-impl Expr for Literal {
+impl Eval for Literal {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
-        Ok(self.value.literal.clone())
+        Ok(self.value.clone())
     }
 }
 
-impl Expr for Grouping {
+impl Eval for Grouping {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         self.expression.eval(env)
     }
 } 
 
-impl Expr for Variable {
+impl Eval for Variable {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         env.borrow().get(self.identifier.clone())
     }
 }
 
-impl Expr for Assignment {
+impl Eval for Assignment {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let value = self.value.eval(env.clone());
         match value {
@@ -197,7 +197,7 @@ impl Expr for Assignment {
 // constructors and other implementations
 
 impl Binary {
-    pub fn new (operator: Token, left: Box<dyn Expr>, right: Box<dyn Expr>) -> Option<Self> {
+    pub fn new (operator: Token, left: Box<dyn Eval>, right: Box<dyn Eval>) -> Option<Self> {
         match &operator.t {
             TokenType::EQUAL_EQUAL | TokenType::BANG_EQUAL | TokenType::LESS | TokenType::LESS_EQUAL | TokenType::GREATER | TokenType::GREATER_EQUAL |
             TokenType::PLUS | TokenType::MINUS | TokenType::STAR | TokenType::SLASH => {
@@ -212,7 +212,7 @@ impl Binary {
 }
 
 impl Unary {
-    pub fn new(operator: Token, expression: Box<dyn Expr>) -> Option<Unary> {
+    pub fn new(operator: Token, expression: Box<dyn Eval>) -> Option<Unary> {
         match &operator.t {
             TokenType::MINUS | TokenType::BANG => Some(Unary{operator, expression}),
             _ => {
@@ -224,17 +224,17 @@ impl Unary {
 }
 
 impl Grouping {
-    pub fn new(expression: Box<dyn Expr>) -> Grouping {
+    pub fn new(expression: Box<dyn Eval>) -> Grouping {
         Grouping{expression}
     }
 }
 
 impl Literal {
-    pub fn new(value: Token) -> Option<Literal> {
-        match &value.t {
-            TokenType::NUMBER | TokenType::STRING | TokenType::NIL => Some(Literal{value}),
+    pub fn new(token: Token) -> Option<Literal> {
+        match &token.t {
+            TokenType::NUMBER | TokenType::STRING | TokenType::NIL => Some(Literal{value: token.literal}),
             _ => {
-                crate::error("Parsing error!", &format!("Unexpected value {} for a literal", value.lexeme), value.line);
+                crate::error("Parsing error!", &format!("Unexpected value {} for a literal", token.lexeme), token.line);
                 None
             }
         }
@@ -248,56 +248,50 @@ impl Variable {
 }
 
 impl Assignment {
-    pub fn new(var: Variable, value: Box<dyn Expr>) -> Self {
+    pub fn new(var: Variable, value: Box<dyn Eval>) -> Self {
         Assignment {var, value}
     }
 }
 
 /* Statements */
 
-pub trait Stmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<(), ()>;
-}
-
 // An expression statement is one that evaluates an expression and ignores its result
 pub struct ExprStmt {
-    body: Box<dyn Expr>,
+    body: Box<dyn Eval>,
 }
 
 impl ExprStmt {
-    pub fn new(expr: Box<dyn Expr>) -> ExprStmt {
+    pub fn new(expr: Box<dyn Eval>) -> ExprStmt {
         ExprStmt {body: expr}
     }
 }
 
-impl Stmt for ExprStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
-        let res = self.body.eval(env);
-        if res.is_err() {
-            Err(())
-        } else {
-            Ok(())
+impl Eval for ExprStmt {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        match self.body.eval(env) {
+            Err(_) => Err(()),
+            Ok(res) => Ok(res),
         }
     }
 }
 
 // print statement, prints the expression
 pub struct PrintStmt {
-    value: Box<dyn Expr>,
+    value: Box<dyn Eval>,
 }
 
 impl PrintStmt {
-    pub fn new(expr: Box<dyn Expr>) -> PrintStmt {
+    pub fn new(expr: Box<dyn Eval>) -> PrintStmt {
         PrintStmt {value: expr}
     }
 }
 
-impl Stmt for PrintStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+impl Eval for PrintStmt {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let val = self.value.eval(env);
         if val.is_ok() {
             println!("{}", val.unwrap());
-            Ok(())
+            Ok(crate::tokens::Literal::NIL)
         } else {
             Err(())
         }
@@ -307,20 +301,25 @@ impl Stmt for PrintStmt {
 // declaration statement
 pub struct VarDeclaration {
     identifier: Token,
-    value: Box<dyn Expr>
+    value: Box<dyn Eval>
 }
 
 impl VarDeclaration {
-    pub fn new(identifier: Token, value: Box<dyn Expr>) -> VarDeclaration {
+    pub fn new(identifier: Token, value: Box<dyn Eval>) -> VarDeclaration {
         VarDeclaration {identifier, value}
     }
 }
 
-impl Stmt for VarDeclaration {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+impl Eval for VarDeclaration {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let value = self.value.eval(env.clone());
         match value {
-            Ok(x) => env.borrow_mut().add(self.identifier.clone(), x),
+            Ok(x) => {
+                match env.borrow_mut().add(self.identifier.clone(), x) {
+                    Err(e) => Err(e),
+                    Ok(_) => Ok(crate::tokens::Literal::NIL),
+                }
+            },
             Err(e) => Err(e)
         }
     }
@@ -328,17 +327,17 @@ impl Stmt for VarDeclaration {
 
 // block statement
 pub struct BlockStmt {
-    statements: Vec<Box<dyn Stmt>>,
+    statements: Vec<Box<dyn Eval>>,
 }
 
 impl BlockStmt {
-    pub fn new(statements: Vec<Box<dyn Stmt>>) -> Self {
+    pub fn new(statements: Vec<Box<dyn Eval>>) -> Self {
         BlockStmt {statements}
     }
 }
 
-impl Stmt for BlockStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+impl Eval for BlockStmt {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let mut enclosed_env = Environment::new(Some(env));
         interpret(&self.statements, Rc::new(RefCell::new(enclosed_env)))
     }

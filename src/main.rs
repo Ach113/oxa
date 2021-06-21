@@ -19,7 +19,7 @@ use interpreter::interpret;
 use environment::Environment;
 
 // executes given instruction/set of instructions
-fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<(), ()> {
+fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
     let mut scanner = Scanner::new(code);
     // scan scource code for tokens
     let tokens = scanner.scan_tokens();
@@ -29,7 +29,7 @@ fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<(), ()> {
     let statements = parser.parse();
     // execute the statements
     match interpret(&statements, env) {
-        Ok(_) => Ok(()),
+        Ok(x) => Ok(x),
         _ => Err(()),
     }
 }
@@ -56,7 +56,15 @@ fn repl() -> Result<(), Box<dyn Error>> {
         let mut instruction = String::new();
         std::io::stdin().read_line(&mut instruction);
         if !instruction.trim().is_empty() {
-            run(instruction, env.clone());
+            match run(instruction, env.clone()) {
+                Err(_) => return Err("".into()),
+                Ok(x) => {
+                    match x {
+                        Literal::NIL => {},
+                        _ => println!("{}", x),
+                    }
+                },
+            }; 
         }
     }
     Ok(())
