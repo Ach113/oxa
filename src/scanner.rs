@@ -159,7 +159,7 @@ impl Scanner {
                     self.current += 1;
                     Token::new("<=".to_string(), Literal::NIL, TokenType::LESS_EQUAL, self.line)
                 } else {
-                    Token::new(c.to_string(), Literal::NIL, TokenType::EQUAL, self.line)
+                    Token::new(c.to_string(), Literal::NIL, TokenType::LESS, self.line)
                 }
             ),
             '>' => self.tokens.push(
