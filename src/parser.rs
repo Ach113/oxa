@@ -3,11 +3,11 @@ use crate::AST;
 use crate::AST::Eval;
 
 // operators supported by each type of expression
-const equalities: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
-const comparisons: [TokenType; 4] = [TokenType::GREATER, TokenType::GREATER_EQUAL, TokenType::LESS, TokenType::LESS_EQUAL];
-const terms: [TokenType; 2] = [TokenType::PLUS, TokenType::MINUS];
-const factors: [TokenType; 2] = [TokenType::STAR, TokenType::SLASH];
-const unaries: [TokenType; 2] = [TokenType::BANG, TokenType::MINUS];
+const EQUALITIES: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
+const COMPARISONS: [TokenType; 4] = [TokenType::GREATER, TokenType::GREATER_EQUAL, TokenType::LESS, TokenType::LESS_EQUAL];
+const TERMS: [TokenType; 2] = [TokenType::PLUS, TokenType::MINUS];
+const FACTORS: [TokenType; 2] = [TokenType::STAR, TokenType::SLASH];
+const UNARIES: [TokenType; 2] = [TokenType::BANG, TokenType::MINUS];
 
 type Error = Box<dyn std::error::Error>;
 
@@ -132,10 +132,11 @@ impl Parser {
         match self.peek().t {
             TokenType::IF => self.if_statement(),
             TokenType::PRINT => self.print_statement(),
+            TokenType::WHILE => self.while_loop(),
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
                     Ok(stmts) => Ok(Box::new(AST::BlockStmt::new(stmts))),
-                    Err(e) => {
+                    Err(_) => {
                         crate::error("SyntaxError", "invalid body of block statement", self.peek().line);
                         Err(())
                     },
@@ -143,6 +144,38 @@ impl Parser {
             },
             _ => self.expression_stmt()
         }
+    }
+
+    // "while" expression "{" statement "}"
+    fn while_loop(&mut self) -> Result<Box<dyn Eval>, ()> {
+        self.advance(); // consume "while" token
+        // condition
+        let cond = self.expression();
+        // loop body
+        let mut stmt: Option<Box<dyn Eval>> = None;
+        if self.check_type(&TokenType::LEFT_BRACE) {
+            match self.statement() {
+                Ok(x) => stmt = Some(x),
+                _ => {
+                    crate::error("SyntaxError", "invalid statement in 'while' block", self.peek().line);
+                    self.synchronize();
+                    return Err(());
+                }
+            }
+        } else {
+            crate::error("SyntaxError", "Expected '{' after 'while' condition", self.previous().line);
+            self.synchronize();
+            return Err(());
+        }
+        match cond {
+            Ok(x) => Ok(Box::new(AST::WhileLoop::new(x, stmt.unwrap()))),
+            _ => {
+                crate::error("SyntaxError", "Invalid condition for while loop", self.peek().line);
+                self.synchronize();
+                Err(())
+            }
+        }
+        
     }
 
     // if expression statement (else statement)?
@@ -198,13 +231,13 @@ impl Parser {
         while !(self.at_end() || self.check_type(&TokenType::RIGHT_BRACE)) {
             match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
-                Err(e) => return Err(()),
+                Err(_) => return Err(()),
             }
         }
 
         match self.consume(TokenType::RIGHT_BRACE, "Expect '}' after block") {
-            Ok(x) => Ok(statements),
-            Err(e) => Err(())
+            Ok(_) => Ok(statements),
+            Err(_) => Err(())
         }
     }
 
@@ -222,7 +255,7 @@ impl Parser {
 
     fn expression_stmt(&mut self) -> Result<Box<dyn Eval>, ()> {
         match self.expression() {
-            Err(e) => Err(()),
+            Err(_) => Err(()),
             Ok(expr) => {
                 if self.check_type(&TokenType::SEMICOLON) {
                     self.advance();
@@ -238,6 +271,7 @@ impl Parser {
         self.assignment()
     }
 
+    // expression with lowest precendence
     fn assignment(&mut self) -> Result<Box<dyn Eval>, Error> {
         if self.next(TokenType::EQUAL) {
             let lhs = self.advance(); // target variable
@@ -255,20 +289,54 @@ impl Parser {
                 }
             }
         } else {
-            self.equality()
+            self.logical_or()
         }
     }
 
-    // expression with lowest precendence
+    fn logical_or(&mut self) -> Result<Box<dyn Eval>, Error> {
+        match self.logical_and() {
+            Ok(mut expr) => {
+                while self.check_type(&TokenType::OR) || self.check_type(&TokenType::XOR) {
+                    self.advance();
+                    let operator = self.previous();
+                    expr = match self.logical_and() {
+                        Ok(right) => Box::new(AST::LogicalExpr::new(operator, expr, right).unwrap()),
+                        Err(e) => return Err(e),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    fn logical_and(&mut self) -> Result<Box<dyn Eval>, Error> {
+        match self.equality() {
+            Ok(mut expr) => {
+                while self.check_type(&TokenType::AND) {
+                    self.advance();
+                    let operator = self.previous();
+                    expr = match self.equality() {
+                        Ok(right) => Box::new(AST::LogicalExpr::new(operator, expr, right).unwrap()),
+                        Err(e) => return Err(e),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    
     fn equality(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.comparison() {
             Ok(mut expr) => {
-                while equalities.iter().any(|x| self.check_type(x)) {
+                while EQUALITIES.iter().any(|x| self.check_type(x)) {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.comparison() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
-                        Err(right) => return Err(right),
+                        Err(e) => return Err(e),
                     };
                 }
                 Ok(expr)
@@ -281,7 +349,7 @@ impl Parser {
     fn comparison(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.term() {
             Ok(mut expr) => {
-                while comparisons.iter().any(|x| self.check_type(x)) {
+                while COMPARISONS.iter().any(|x| self.check_type(x)) {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.term() {
@@ -298,7 +366,7 @@ impl Parser {
     fn term(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.factor() {
             Ok(mut expr) => {
-                while terms.iter().any(|x| self.check_type(x)) {
+                while TERMS.iter().any(|x| self.check_type(x)) {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.factor() {
@@ -315,7 +383,7 @@ impl Parser {
     fn factor(&mut self) -> Result<Box<dyn Eval>, Error> {
         match self.unary() {
             Ok(mut expr) => {
-                while factors.iter().any(|x| self.check_type(x)) {
+                while FACTORS.iter().any(|x| self.check_type(x)) {
                     self.advance();
                     let operator = self.previous();
                     expr = match self.unary() {
@@ -330,7 +398,7 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Box<dyn Eval>, Error> {
-        if unaries.iter().any(|x| self.check_type(x)) {
+        if UNARIES.iter().any(|x| self.check_type(x)) {
             self.advance();
             let operator = self.previous();
             match self.unary() {
@@ -359,7 +427,7 @@ impl Parser {
         if self.check_type(&TokenType::LEFT_BRACE) {
             match self.block_statement() {
                 Ok(stmts) => return Ok(Box::new(AST::BlockStmt::new(stmts))),
-                Err(e) => {
+                Err(_) => {
                     crate::error("SyntaxError", "invalid body of block statement", self.peek().line);
                     return Err("Invalid Expression".into());
                 },
@@ -403,7 +471,7 @@ impl Parser {
             if self.previous().t == TokenType::SEMICOLON { return; }
 
             // start of new statement is indicated by following token types
-            match (self.peek().t) {
+            match self.peek().t {
                 TokenType::CLASS | TokenType::FUN | TokenType::VAR | TokenType::FOR | TokenType::IF | TokenType::WHILE | TokenType::PRINT | TokenType::RETURN => {
                     return;
                 },

@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 
 use std::fmt;
-use core::ops::{Add, Sub, Mul, Div};
+use core::ops::{Add, Sub, Mul, Div, BitOr, BitAnd, BitXor};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -50,6 +50,7 @@ pub enum TokenType {
     TRUE, 
     VAR, 
     WHILE,
+    XOR,
 
     EOF
 }
@@ -147,6 +148,39 @@ impl Div for Literal {
                 }
             },
             _ => Err(String::from("TypeError for operator /"))
+        }
+    }
+}
+
+impl BitOr for Literal {
+    type Output = Result<Literal, String>;
+
+    fn bitor(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::BOOL(a), Literal::BOOL(b)) => Ok(Literal::BOOL(a | b)),
+            _ => Err(String::from("TypeError")),
+        }
+    }
+}
+
+impl BitAnd for Literal {
+    type Output = Result<Literal, String>;
+
+    fn bitand(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::BOOL(a), Literal::BOOL(b)) => Ok(Literal::BOOL(a & b)),
+            _ => Err(String::from("TypeError")),
+        }
+    }
+}
+
+impl BitXor for Literal {
+    type Output = Result<Literal, String>;
+
+    fn bitxor(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::BOOL(a), Literal::BOOL(b)) => Ok(Literal::BOOL(a ^ b)),
+            _ => Err(String::from("TypeError")),
         }
     }
 }
