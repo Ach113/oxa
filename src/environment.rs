@@ -27,14 +27,18 @@ impl Environment {
         Ok(())
     }
 
-    pub fn assign(&mut self, identifier: String, value: Literal) -> Result<Literal, ()> {
-        if self.values.contains_key(&identifier) {
-            self.values.insert(identifier, value.clone());
+    pub fn assign(&mut self, identifier: Token, value: Literal) -> Result<Literal, ()> {
+        let name = &identifier.lexeme;
+        if self.values.contains_key(name) {
+            self.values.insert(identifier.lexeme, value.clone());
             return Ok(value);
         } else {
             match (&mut self.enclosing) {
                 Some(env) => env.borrow_mut().assign(identifier.clone(), value.clone()),
-                None => Err(()),
+                None => {
+                    crate::error("NameError", &format!("Assignment to uninitialized variable '{}'", name), identifier.line);
+                    Err(())
+                },
             }
         }
     }
@@ -58,5 +62,14 @@ impl Environment {
 
     pub fn contains_key(&self, key: &String) -> bool {
         self.values.contains_key(key)
+    }
+}
+
+impl fmt::Display for Environment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.enclosing {
+            None => write!(f, "{:?} | None", self.values),
+            Some(env) => write!(f,"{:?} | ({})", self.values, env.borrow()),
+        }
     }
 }

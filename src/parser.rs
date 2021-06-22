@@ -25,7 +25,7 @@ impl Parser {
 
     // checks if parser has reached the end
     fn at_end(&self) -> bool {
-        (self.current as usize) == self.tokens.len()
+        (self.current as usize) >= self.tokens.len()
     }
 
     // returns token at index "current"
@@ -64,17 +64,22 @@ impl Parser {
 
     /*** Statements ***/
 
-    pub fn parse(&mut self) -> Vec<Box<dyn Eval>> {
+    pub fn parse(&mut self) -> Result<Vec<Box<dyn Eval>>, ()> {
         let mut stmt_vec: Vec<Box<dyn Eval>> = Vec::new();
+        let mut error = false;
         // iterate until EOF
         while !self.at_end() {
             // declarations have highest precendance
-            let stmt = self.declaration();
-            if stmt.is_ok() {
-                stmt_vec.push(stmt.unwrap());
+            match self.declaration() {
+                Ok(stmt) => stmt_vec.push(stmt),
+                _ => error = true,
             }
         }
-        stmt_vec
+        if error {
+            Err(())
+        } else {
+            Ok(stmt_vec)
+        }
     }
 
     // variable, function or class declarations
@@ -125,15 +130,63 @@ impl Parser {
 
     fn statement(&mut self) -> Result<Box<dyn Eval>, ()> {
         match self.peek().t {
+            TokenType::IF => self.if_statement(),
             TokenType::PRINT => self.print_statement(),
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
                     Ok(stmts) => Ok(Box::new(AST::BlockStmt::new(stmts))),
-                    Err(e) => Err(()),
+                    Err(e) => {
+                        crate::error("SyntaxError", "invalid body of block statement", self.peek().line);
+                        Err(())
+                    },
                 }
             },
             _ => self.expression_stmt()
         }
+    }
+
+    // if expression statement (else statement)?
+    fn if_statement(&mut self) -> Result<Box<dyn Eval>, ()> {
+        self.advance(); // consume 'if' token
+        // condition
+        let cond = self.expression();
+        // statement if true
+        let mut stmt: Option<Box<dyn Eval>> = None;
+        if self.check_type(&TokenType::LEFT_BRACE) {
+            match self.statement() {
+                Ok(x) => stmt = Some(x),
+                _ => {
+                    crate::error("SyntaxError", "invalid statement in 'if' block", self.peek().line);
+                    return Err(());
+                }
+            }
+        } else {
+            crate::error("SyntaxError", "Expected '{' after 'if' condition", self.previous().line);
+            return Err(());
+        }
+        // ELSE statement
+        let mut else_stmt: Option<Box<dyn Eval>> = None;
+        if self.check_type(&TokenType::ELSE) {
+            self.advance(); // consume 'else' token
+            if self.check_type(&TokenType::LEFT_BRACE) {
+                match self.statement() {
+                    Ok(x) => else_stmt = Some(x),
+                    _ => {
+                        crate::error("SyntaxError", "invalid statement in 'else' block", self.peek().line);
+                        return Err(());
+                    }
+                }
+            } else {
+                crate::error("SyntaxError", "Expected '{' after 'else' keyword", self.previous().line);
+                return Err(());
+            }
+        }
+        // error check
+        if cond.is_err() || stmt.is_none() {
+            crate::error("ParserError", "invalid if statement", self.peek().line);
+            return Err(());
+        }
+        Ok(Box::new(AST::IfStmt::new(cond.unwrap(), stmt.unwrap(), else_stmt)))
     }
 
     // { declaration* }
@@ -145,7 +198,7 @@ impl Parser {
         while !(self.at_end() || self.check_type(&TokenType::RIGHT_BRACE)) {
             match self.declaration() {
                 Ok(stmt) => statements.push(stmt),
-                Err(_) => return Err(()),
+                Err(e) => return Err(()),
             }
         }
 
@@ -169,18 +222,14 @@ impl Parser {
 
     fn expression_stmt(&mut self) -> Result<Box<dyn Eval>, ()> {
         match self.expression() {
-            Err(_) => Err(()),
-            Ok(expr) => Ok(Box::new(AST::ExprStmt::new(expr))),
+            Err(e) => Err(()),
+            Ok(expr) => {
+                if self.check_type(&TokenType::SEMICOLON) {
+                    self.advance();
+                }
+                Ok(Box::new(AST::ExprStmt::new(expr)))
+            },
         }
-        /*
-        let expr = self.expression().unwrap();
-        let res = self.consume(TokenType::SEMICOLON, "Expect ';' after expression");
-        if res.is_ok() {
-            Ok(Box::new(AST::ExprStmt::new(expr)))
-        } else {
-            Err(())
-        }
-        */
     }
 
     /*** Expressions ***/
@@ -298,7 +347,7 @@ impl Parser {
     // either returns literal value of the expression or another expression wrapped in parentheses
     fn primary(&mut self) -> Result<Box<dyn Eval>, Error> {
         // literal types
-        if vec![TokenType::NUMBER, TokenType::STRING, TokenType::NIL].iter().any(|x| self.check_type(x)) {
+        if vec![TokenType::NUMBER, TokenType::STRING, TokenType::NIL, TokenType::TRUE, TokenType::FALSE].iter().any(|x| self.check_type(x)) {
             return Ok(Box::new(AST::Literal::new(self.advance()).unwrap()));
         }
         // variable
@@ -306,6 +355,18 @@ impl Parser {
             return Ok(Box::new(AST::Variable::new(self.advance())));
         }
 
+        // braces
+        if self.check_type(&TokenType::LEFT_BRACE) {
+            match self.block_statement() {
+                Ok(stmts) => return Ok(Box::new(AST::BlockStmt::new(stmts))),
+                Err(e) => {
+                    crate::error("SyntaxError", "invalid body of block statement", self.peek().line);
+                    return Err("Invalid Expression".into());
+                },
+            }
+        }
+
+        // parenthesis
         if self.check_type(&TokenType::LEFT_PAREN) {
             self.advance();
             match self.expression() {
@@ -319,6 +380,7 @@ impl Parser {
             }
         }
         // this line is not supposed to execute
+        crate::error("SyntaxError", &format!("expected expression, got {}", self.peek()), self.peek().line);
         Err(format!("Expected expression, got {}", self.peek()).into())
     }
 
