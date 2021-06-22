@@ -188,7 +188,7 @@ impl Eval for Assignment {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let value = self.value.eval(env.clone());
         match value {
-            Ok(x) => env.borrow_mut().assign(self.var.identifier.lexeme.clone(), x.clone()),
+            Ok(x) => env.borrow_mut().assign(self.var.identifier.clone(), x.clone()),
             Err(e) => Err(e)
         }
     }
@@ -232,7 +232,7 @@ impl Grouping {
 impl Literal {
     pub fn new(token: Token) -> Option<Literal> {
         match &token.t {
-            TokenType::NUMBER | TokenType::STRING | TokenType::NIL => Some(Literal{value: token.literal}),
+            TokenType::NUMBER | TokenType::STRING | TokenType::NIL | TokenType::TRUE | TokenType::FALSE => Some(Literal{value: token.literal}),
             _ => {
                 crate::error("Parsing error!", &format!("Unexpected value {} for a literal", token.lexeme), token.line);
                 None
@@ -340,6 +340,31 @@ impl Eval for BlockStmt {
     fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let mut enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
         interpret(&self.statements, enclosing)
+    }
+}
+
+// if statement
+pub struct IfStmt {
+    condition: Box<dyn Eval>,
+    expr: Box<dyn Eval>,
+    else_stmt: Option<Box<dyn Eval>>,
+}
+
+impl IfStmt {
+    pub fn new(condition: Box<dyn Eval>, expr: Box<dyn Eval>, else_stmt: Option<Box<dyn Eval>>) -> Self {
+        IfStmt {condition, expr, else_stmt}
+    }
+}
+
+impl Eval for IfStmt {
+    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        if self.condition.eval(env.clone()).unwrap() == crate::tokens::Literal::BOOL(true) {
+            return self.expr.eval(env);
+        }
+        match &self.else_stmt {
+            Some(stmt) => stmt.eval(env),
+            None => Ok(crate::tokens::Literal::NIL), 
+        }
     }
 }
 

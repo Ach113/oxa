@@ -27,7 +27,7 @@ fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
     // construct parser with given tokens
     let mut parser = Parser::new(tokens);
     // get list of statements from the parser
-    let statements = parser.parse();
+    let statements = parser.parse()?;
     // execute the statements
     match interpret(&statements, env) {
         Ok(x) => Ok(x),

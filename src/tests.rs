@@ -16,6 +16,7 @@ mod tests {
         assert_eq!(Literal::NUMERIC(5.0), crate::run("var c=5;c".to_string(), env.clone())?); // var declaration with value
         assert_eq!(Literal::NUMERIC(42.0), crate::run("c=42;c".to_string(), env.clone())?); // var reassignment
         assert!(crate::run("var c;".to_string(), env.clone()).is_err()); // var redefinition error
+        assert!(crate::run("d=5;".to_string(), env.clone()).is_err()); // uninitialized variable error
         Ok(())
     }
 
@@ -39,6 +40,16 @@ mod tests {
         assert_eq!(Literal::NUMERIC(5.0), crate::run("var b = 21;{b = 13; {b=5;}}b".to_string(), env.clone())?);
         assert_eq!(Literal::NUMERIC(13.0), crate::run("var c = 21;{c = 13; {var c=5;}}c".to_string(), env.clone())?);
         assert!(crate::run("{var x = 15;}print x;".to_string(), env.clone()).is_err()); // undeclared variable error
+        Ok(())
+    }
+
+    #[test]
+    fn control_flow() -> Result<(), ()> {
+        let env = Rc::new(RefCell::new(Environment::new(None)));
+        assert_eq!(Literal::NUMERIC(42.0), crate::run("var a; if true {a=42;} a".to_string(), env.clone())?);
+        assert_eq!(Literal::NUMERIC(42.0), crate::run("var b; if false {b=10;} else {b=42;} b".to_string(), env.clone())?);
+        assert!(crate::run("if false {} else ".to_string(), env.clone()).is_err()); // expect '{}' after 'else'
+        assert!(crate::run("if true ".to_string(), env.clone()).is_err()); // expect '{}' after 'if'
         Ok(())
     }
 }
