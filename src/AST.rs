@@ -1,4 +1,3 @@
-use std::fmt;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -51,7 +50,7 @@ pub struct Assignment {
 /*** eval implementations ***/
 
 impl Eval for Binary {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let op = &self.operator.lexeme;
         let left = self.left.eval(env.clone());
         let right = self.right.eval(env.clone());
@@ -83,7 +82,7 @@ impl Eval for Binary {
                 let res = left.clone() + right.clone();
                 match res {
                     Ok(x) => Ok(x),
-                    Err(x) => {
+                    Err(_) => {
                         crate::error("TypeError", &format!("Invalid operand type(s) for +: {}, {}", left.get_type(), right.get_type()), self.operator.line);
                         Err(())
                     }
@@ -93,7 +92,7 @@ impl Eval for Binary {
                 let res = left.clone() - right.clone();
                 match res {
                     Ok(x) => Ok(x),
-                    Err(x) => {
+                    Err(_) => {
                         crate::error("TypeError", &format!("Invalid operand type(s) for -: {}, {}", left.get_type(), right.get_type()), self.operator.line);
                         Err(())     
                     }
@@ -117,7 +116,7 @@ impl Eval for Binary {
                 let res = left.clone() * right.clone();
                 match res {
                     Ok(x) => Ok(x),
-                    Err(x) => {
+                    Err(_) => {
                         crate::error("TypeError", &format!("Invalid operand type(s) for *: {}, {}", left.get_type(), right.get_type()), self.operator.line);
                         Err(())      
                     }
@@ -132,16 +131,16 @@ impl Eval for Binary {
 }
 
 impl Eval for Unary {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let op = &self.operator.lexeme;
         let expr = self.expression.eval(env.clone());
         if expr.is_err() {
             return Err(());
         }
-        let Eval = expr.unwrap();
+        let eval = expr.unwrap();
         match &**op {
             "-" => {
-                match Eval {
+                match eval {
                     crate::tokens::Literal::NUMERIC(x) => Ok(crate::tokens::Literal::NUMERIC(-x)),
                     _ => {
                         crate::error("Parsing error", &format!("invalid right hand side expression for operator {}", op), self.operator.line);  
@@ -150,7 +149,7 @@ impl Eval for Unary {
                 }
             },
             "!" => {
-                match Eval {
+                match eval {
                     crate::tokens::Literal::BOOL(x) => Ok(crate::tokens::Literal::BOOL(!x)),
                     _ => {
                         crate::error("Parsing error", &format!("invalid right hand side expression for operator {}", op), self.operator.line);   
@@ -173,7 +172,7 @@ impl Eval for Literal {
 }
 
 impl Eval for Grouping {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         self.expression.eval(env)
     }
 } 
@@ -185,7 +184,7 @@ impl Eval for Variable {
 }
 
 impl Eval for Assignment {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let value = self.value.eval(env.clone());
         match value {
             Ok(x) => env.borrow_mut().assign(self.var.identifier.clone(), x.clone()),
@@ -253,6 +252,69 @@ impl Assignment {
     }
 }
 
+// logical expressions
+pub struct LogicalExpr {
+    operator: Token,
+    left: Box<dyn Eval>,
+    right: Box<dyn Eval>,
+}
+
+impl LogicalExpr {
+    pub fn new(operator: Token, left: Box<dyn Eval>, right: Box<dyn Eval>) -> Result<Self, ()> {
+        match &operator.t {
+            TokenType::OR | TokenType::AND | TokenType::XOR => {},
+            _ => {
+                crate::error("SyntaxError", &format!("Invalid logical operator '{}'", operator), operator.line);
+                return Err(());
+            },
+        }
+        Ok(LogicalExpr {operator, left, right})
+    }
+}
+
+impl Eval for LogicalExpr {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        let left = self.left.eval(env.clone())?;
+        let right = self.right.eval(env.clone())?;
+        let op = &self.operator.t;
+
+        match &op {
+            TokenType::OR => {
+                match left.clone() | right.clone() {
+                    Ok(x) => Ok(x),
+                    Err(_) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for 'or': {}, {}", left.get_type(), right.get_type()), self.operator.line);
+                        Err(())      
+                    }
+                }
+            },
+            TokenType::AND => {
+                match left.clone() & right.clone() {
+                    Ok(x) => Ok(x),
+                    Err(_) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for 'and': {}, {}", left.get_type(), right.get_type()), self.operator.line);
+                        Err(())      
+                    }
+                }
+            },
+            TokenType::XOR => {
+                match left.clone() ^ right.clone() {
+                    Ok(x) => Ok(x),
+                    Err(_) => {
+                        crate::error("TypeError", &format!("Invalid operand type(s) for 'xor': {}, {}", left.get_type(), right.get_type()), self.operator.line);
+                        Err(())      
+                    }
+                }
+            },
+            _ => {
+                crate::error("SyntaxError", &format!("Invalid logical operator '{}'", self.operator), self.operator.line);
+                Err(())
+            }
+        }
+    }
+}
+
+
 /* Statements */
 
 // An expression statement is one that evaluates an expression and ignores its result
@@ -267,7 +329,7 @@ impl ExprStmt {
 }
 
 impl Eval for ExprStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         match self.body.eval(env) {
             Err(_) => Err(()),
             Ok(res) => Ok(res),
@@ -287,7 +349,7 @@ impl PrintStmt {
 }
 
 impl Eval for PrintStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let val = self.value.eval(env);
         if val.is_ok() {
             println!("{}", val.unwrap());
@@ -311,7 +373,7 @@ impl VarDeclaration {
 }
 
 impl Eval for VarDeclaration {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         let value = self.value.eval(env.clone());
         match value {
             Ok(x) => {
@@ -337,8 +399,8 @@ impl BlockStmt {
 }
 
 impl Eval for BlockStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
-        let mut enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
         interpret(&self.statements, enclosing)
     }
 }
@@ -357,7 +419,7 @@ impl IfStmt {
 }
 
 impl Eval for IfStmt {
-    fn eval(&self, mut env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
         if self.condition.eval(env.clone()).unwrap() == crate::tokens::Literal::BOOL(true) {
             return self.expr.eval(env);
         }
@@ -365,6 +427,28 @@ impl Eval for IfStmt {
             Some(stmt) => stmt.eval(env),
             None => Ok(crate::tokens::Literal::NIL), 
         }
+    }
+}
+
+// while loop
+pub struct WhileLoop {
+    condition: Box<dyn Eval>,
+    body: Box<dyn Eval>,
+}
+
+impl WhileLoop {
+    pub fn new(condition: Box<dyn Eval>, body: Box<dyn Eval>) -> Self {
+        WhileLoop {condition, body}
+    }
+}
+
+impl Eval for WhileLoop {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, ()> {
+        let mut ret: Result<crate::tokens::Literal, ()> = Ok(crate::tokens::Literal::NIL);
+        while self.condition.eval(env.clone())? == crate::tokens::Literal::BOOL(true) {
+            ret = self.body.eval(env.clone());
+        }
+        ret
     }
 }
 

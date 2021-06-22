@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use crate::tokens::{TokenType, Token, Literal};
 
 pub struct Scanner {
@@ -34,7 +32,7 @@ impl Scanner {
 
     pub fn get_identifier(&mut self) -> Token {
         // identifiers are allowed to contain alphabetic, numeric character and '_' char
-        while (!self.is_eof() && (self.cell().is_alphabetic() || self.cell().is_digit(10) || self.cell() == '_')) {
+        while !self.is_eof() && (self.cell().is_alphabetic() || self.cell().is_digit(10) || self.cell() == '_') {
             self.current += 1;
         }
 
@@ -61,6 +59,7 @@ impl Scanner {
             "super" => Token::new(identifier.to_string(), Literal::NIL, TokenType::SUPER, self.line),
             "print" => Token::new(identifier.to_string(), Literal::NIL, TokenType::PRINT, self.line),
             "nil" => Token::new(identifier.to_string(), Literal::NIL, TokenType::NIL, self.line),
+            "xor" => Token::new(identifier.to_string(), Literal::NIL, TokenType::XOR, self.line),
             _ => {
                 Token::new(identifier.to_string(), Literal::NIL, TokenType::IDENTIFIER, self.line)
             },
@@ -69,7 +68,7 @@ impl Scanner {
 
     pub fn get_number(&mut self) -> Option<f64> {
         
-        while (!self.is_eof() && (self.cell().is_digit(10) || self.cell() == '.')) {
+        while !self.is_eof() && (self.cell().is_digit(10) || self.cell() == '.') {
             self.current += 1;
         }
 
@@ -91,7 +90,7 @@ impl Scanner {
 
     pub fn get_string(&mut self) -> Option<String> {
         // at function call "current" points to first char of string literal
-        while (!self.next('"') && !self.is_eof()) {
+        while !self.next('"') && !self.is_eof() {
             if self.cell() == '\n' {
                 self.line += 1;
             }
@@ -130,10 +129,12 @@ impl Scanner {
             }
             self.current += 1;
         }
+
+        if self.is_eof() { return; }
         
         let c = self.cell();
         
-        match (c) {
+        match c {
             // single char tokens
             '(' => self.tokens.push(Token::new(c.to_string(), Literal::NIL, TokenType::LEFT_PAREN, self.line)),
             ')' => self.tokens.push(Token::new(c.to_string(), Literal::NIL, TokenType::RIGHT_PAREN, self.line)),
@@ -180,11 +181,11 @@ impl Scanner {
             ),
             // special case: '/' stands for division, while // stands for comment
             '/' => {
-                if (self.next('/')) {
+                if self.next('/') {
                     while !(self.is_eof() || self.cell() == '\n') { 
                         self.current += 1;
                     }
-                } else if (self.next('*')) {
+                } else if self.next('*') {
                     self.multi_line_comment += 1;
                     self.current += 1;
                 } else {

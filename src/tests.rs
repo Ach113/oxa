@@ -1,7 +1,3 @@
-fn variable_declaration() {
-
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -29,6 +25,9 @@ mod tests {
         assert_eq!(Literal::NUMERIC(5.0), crate::run("10*(3+2) / 10".to_string(), env.clone())?);
         assert_eq!(Literal::BOOL(true), crate::run("42 == (32 + 10)".to_string(), env.clone())?);
         assert_eq!(Literal::BOOL(false), crate::run("42 != (32 + 10)".to_string(), env.clone())?);
+        assert_eq!(Literal::BOOL(true), crate::run("true or false".to_string(), env.clone())?);
+        assert_eq!(Literal::BOOL(false), crate::run("true and false".to_string(), env.clone())?);
+        assert_eq!(Literal::BOOL(false), crate::run("var x = true; !x".to_string(), env.clone())?);
         assert!(crate::run("(100 - 100)/(100 - 100)".to_string(), env.clone()).is_err()); // division by zero error
         Ok(())
     }
@@ -49,7 +48,16 @@ mod tests {
         assert_eq!(Literal::NUMERIC(42.0), crate::run("var a; if true {a=42;} a".to_string(), env.clone())?);
         assert_eq!(Literal::NUMERIC(42.0), crate::run("var b; if false {b=10;} else {b=42;} b".to_string(), env.clone())?);
         assert!(crate::run("if false {} else ".to_string(), env.clone()).is_err()); // expect '{}' after 'else'
-        assert!(crate::run("if true ".to_string(), env.clone()).is_err()); // expect '{}' after 'if'
+        assert!(crate::run("if true ".to_string(), env.clone()).is_err()); // expect '{}' after 'if' cond
+        Ok(())
+    }
+
+    #[test]
+    fn loop_test() -> Result<(), ()> {
+        let env = Rc::new(RefCell::new(Environment::new(None)));
+        assert_eq!(Literal::NUMERIC(45.0), crate::run("var sum = 0; var i = 0; while i < 10 {sum = sum + i; i = i + 1;}sum".to_string(), env.clone())?);
+        assert_eq!(Literal::NUMERIC(0.0), crate::run("var x = 0; while 12 < 10 {x = x + 1; }x".to_string(), env.clone())?);
+        assert!(crate::run("var i = 0; while i < 10 i = i + 1; i".to_string(), env.clone()).is_err()); // expect '{}' after 'while' cond
         Ok(())
     }
 }

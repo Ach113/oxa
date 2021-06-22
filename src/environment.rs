@@ -33,7 +33,7 @@ impl Environment {
             self.values.insert(identifier.lexeme, value.clone());
             return Ok(value);
         } else {
-            match (&mut self.enclosing) {
+            match &mut self.enclosing {
                 Some(env) => env.borrow_mut().assign(identifier.clone(), value.clone()),
                 None => {
                     crate::error("NameError", &format!("Assignment to uninitialized variable '{}'", name), identifier.line);
@@ -58,10 +58,6 @@ impl Environment {
                 }
             }
         }
-    }
-
-    pub fn contains_key(&self, key: &String) -> bool {
-        self.values.contains_key(key)
     }
 }
 

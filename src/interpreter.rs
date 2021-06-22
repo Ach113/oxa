@@ -4,9 +4,8 @@ use std::cell::RefCell;
 use crate::AST::Eval;
 use crate::environment::Environment;
 use crate::tokens::Literal;
-use crate::tokens::{TokenType, Token};
 
-pub fn interpret(statements: &Vec<Box<dyn Eval>>, mut env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
+pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
     let mut error_count: u32 = 0;
     let mut res = Literal::NIL;
 
