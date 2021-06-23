@@ -17,17 +17,13 @@ impl Environment {
         Environment {enclosing, values}
     }
 
-    pub fn add(&mut self, identifier: Token, value: Literal) -> Result<(), ()> {
+    pub fn add(&mut self, identifier: Token, value: Literal) -> Result<(), String> {
         let name = &identifier.lexeme;
-        if self.values.contains_key(name) {
-            crate::error("NameError", &format!("Redefinition of variable '{}'", name), identifier.line);
-            return Err(());
-        }
         self.values.insert(identifier.lexeme, value);
         Ok(())
     }
 
-    pub fn assign(&mut self, identifier: Token, value: Literal) -> Result<Literal, ()> {
+    pub fn assign(&mut self, identifier: Token, value: Literal) -> Result<Literal, String> {
         let name = &identifier.lexeme;
         if self.values.contains_key(name) {
             self.values.insert(identifier.lexeme, value.clone());
@@ -37,13 +33,13 @@ impl Environment {
                 Some(env) => env.borrow_mut().assign(identifier.clone(), value.clone()),
                 None => {
                     crate::error("NameError", &format!("Assignment to uninitialized variable '{}'", name), identifier.line);
-                    Err(())
+                    Err(format!("NameError: assignment to uninitialized variable '{}'", name).into())
                 },
             }
         }
     }
 
-    pub fn get(&self, identifier: Token) -> Result<Literal, ()> {
+    pub fn get(&self, identifier: Token) -> Result<Literal, String> {
         let name = &identifier.lexeme;
         let value = self.values.get(name);
         match value {
@@ -53,7 +49,7 @@ impl Environment {
                     Some(env) => env.borrow().get(identifier.clone()),
                     None => {
                         crate::error("NameError", &format!("Undefined variable '{}'", name), identifier.line);
-                        Err(())
+                        Err(format!("NameError: undefined variable '{}'", name).into())
                     }
                 }
             }
