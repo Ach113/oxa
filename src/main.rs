@@ -1,6 +1,5 @@
 use std::env;
 use std::io::Write;
-use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -20,7 +19,7 @@ use interpreter::interpret;
 use environment::Environment;
 
 // executes given instruction/set of instructions
-fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
+fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Literal, String> {
     let mut scanner = Scanner::new(code);
     // scan scource code for tokens
     let tokens = scanner.scan_tokens();
@@ -31,7 +30,7 @@ fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Literal, ()> {
     // execute the statements
     match interpret(&statements, env) {
         Ok(x) => Ok(x),
-        _ => Err(()),
+        Err(e) => Err(e),
     }
 }
 
@@ -41,7 +40,7 @@ fn error(error: &str, message: &str, line: u64) {
 }
 
 // reads text from source file and runs it
-fn runfile(filename: &str) -> Result<(), Box<dyn Error>> {
+fn runfile(filename: &str) -> Result<(), String> {
     let code = std::fs::read_to_string(filename).unwrap();
     let env = Rc::new(RefCell::new(Environment::new(None)));
     run(code, env);
@@ -49,7 +48,7 @@ fn runfile(filename: &str) -> Result<(), Box<dyn Error>> {
 }
 
 // Read a line of input, Evaluate it, Print the result, then Loop
-fn repl() -> Result<(), Box<dyn Error>> {
+fn repl() -> Result<(), Box<dyn std::error::Error>> {
     let env = Rc::new(RefCell::new(Environment::new(None)));
     loop {
         print!(">> ");

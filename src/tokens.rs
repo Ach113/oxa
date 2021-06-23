@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 
 use std::fmt;
-use core::ops::{Add, Sub, Mul, Div, BitOr, BitAnd, BitXor};
+use core::ops::{Add, Sub, Mul, Div, BitOr, BitAnd, BitXor, Rem};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -15,7 +15,8 @@ pub enum TokenType {
     MINUS, 
     PLUS, 
     SEMICOLON, 
-    SLASH, 
+    SLASH,
+    PERCENT,
     STAR,
 
     // One or two character tokens.
@@ -51,6 +52,8 @@ pub enum TokenType {
     VAR, 
     WHILE,
     XOR,
+    BREAK,
+    CONTINUE,
 
     EOF
 }
@@ -148,6 +151,23 @@ impl Div for Literal {
                 }
             },
             _ => Err(String::from("TypeError for operator /"))
+        }
+    }
+}
+
+impl Rem for Literal {
+    type Output = Result<Literal, String>;
+
+    fn rem(self, right: Literal) -> Result<Literal, String> {
+        match (self, right) {
+            (Literal::NUMERIC(a), Literal::NUMERIC(b)) => {
+                if b == 0.0 {
+                    Err(String::from("ZeroDivisionError"))
+                } else {
+                    Ok(Literal::NUMERIC(a % b))
+                }
+            },
+            _ => Err(String::from("TypeError for operator %"))
         }
     }
 }

@@ -60,6 +60,8 @@ impl Scanner {
             "print" => Token::new(identifier.to_string(), Literal::NIL, TokenType::PRINT, self.line),
             "nil" => Token::new(identifier.to_string(), Literal::NIL, TokenType::NIL, self.line),
             "xor" => Token::new(identifier.to_string(), Literal::NIL, TokenType::XOR, self.line),
+            "break" => Token::new(identifier.to_string(), Literal::NIL, TokenType::BREAK, self.line),
+            "continue" => Token::new(identifier.to_string(), Literal::NIL, TokenType::CONTINUE, self.line),
             _ => {
                 Token::new(identifier.to_string(), Literal::NIL, TokenType::IDENTIFIER, self.line)
             },
@@ -146,6 +148,7 @@ impl Scanner {
             '+' => self.tokens.push(Token::new(c.to_string(), Literal::NIL, TokenType::PLUS, self.line)),
             ';' => self.tokens.push(Token::new(c.to_string(), Literal::NIL, TokenType::SEMICOLON, self.line)),
             '*' => self.tokens.push(Token::new(c.to_string(), Literal::NIL, TokenType::STAR, self.line)),
+            '%' => self.tokens.push(Token::new(c.to_string(), Literal::NIL, TokenType::PERCENT, self.line)),
             // two char tokens
             '!' => self.tokens.push(
                 if self.next('=') {
