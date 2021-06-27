@@ -1,6 +1,7 @@
 use crate::tokens::{Token, TokenType};
 use crate::AST;
 use crate::AST::Eval;
+use crate::object::Object;
 
 // operators supported by each type of expression
 const EQUALITIES: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
@@ -108,7 +109,7 @@ impl Parser {
             return Err("Expected identifier".into());
         }
         // initial value of the variable (null)
-        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), crate::tokens::Literal::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Object::NIL, TokenType::NIL, self.previous().line)).unwrap());
         // check if any assignment is being performed
         if self.check_type(&TokenType::EQUAL) {
             self.advance(); // consume "=" token
