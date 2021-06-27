@@ -3,27 +3,28 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::fmt;
 
-use crate::tokens::{Token, Literal};
+use crate::tokens::Token;
+use crate::Object;
 
 #[derive(Debug)]
 pub struct Environment {
     pub enclosing: Option<Rc<RefCell<Environment>>>, // for global scope this field is None
-    pub values: HashMap<String, Literal>,
+    pub values: HashMap<String, Object>,
 }
 
 impl Environment {
     pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
-        let values: HashMap<String, Literal> = HashMap::new();
+        let values: HashMap<String, Object> = HashMap::new();
         Environment {enclosing, values}
     }
 
-    pub fn add(&mut self, identifier: Token, value: Literal) -> Result<(), String> {
+    pub fn add(&mut self, identifier: Token, value: Object) -> Result<(), String> {
         let name = &identifier.lexeme;
         self.values.insert(identifier.lexeme, value);
         Ok(())
     }
 
-    pub fn assign(&mut self, identifier: Token, value: Literal) -> Result<Literal, String> {
+    pub fn assign(&mut self, identifier: Token, value: Object) -> Result<Object, String> {
         let name = &identifier.lexeme;
         if self.values.contains_key(name) {
             self.values.insert(identifier.lexeme, value.clone());
@@ -39,7 +40,7 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, identifier: Token) -> Result<Literal, String> {
+    pub fn get(&self, identifier: Token) -> Result<Object, String> {
         let name = &identifier.lexeme;
         let value = self.values.get(name);
         match value {

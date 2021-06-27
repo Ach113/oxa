@@ -3,11 +3,11 @@ use std::cell::RefCell;
 
 use crate::AST::Eval;
 use crate::environment::Environment;
-use crate::tokens::Literal;
+use crate::object::Object;
 
-pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>) -> Result<Literal, String> {
+pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
     let mut error_count: u32 = 0;
-    let mut res = Literal::NIL;
+    let mut res = Object::NIL;
 
     for stmt in statements {
         match stmt.eval(env.clone()) {

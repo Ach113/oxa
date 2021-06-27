@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::object::Object;
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
 use crate::interpreter::interpret;
@@ -9,7 +10,7 @@ use crate::interpreter::interpret;
 
 // generic expression trait
 pub trait Eval {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String>;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String>;
 }
 
 // binary expression
@@ -27,7 +28,7 @@ pub struct Unary {
 
 // literal expression
 pub struct Literal {
-    value: crate::tokens::Literal
+    value: Object
 }
 
 // grouping expression
@@ -50,29 +51,29 @@ pub struct Assignment {
 /*** eval implementations ***/
 
 impl Eval for Binary {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         let op = &self.operator.lexeme;
         let left = self.left.eval(env.clone())?;
         let right = self.right.eval(env.clone())?;
 
         match &**op {
             "==" => {
-                Ok(crate::tokens::Literal::BOOL(left == right))
+                Ok(Object::BOOL(left == right))
             },
             "!=" => {
-                Ok(crate::tokens::Literal::BOOL(left != right))
+                Ok(Object::BOOL(left != right))
             },
             ">=" => {
-                Ok(crate::tokens::Literal::BOOL(left >= right))
+                Ok(Object::BOOL(left >= right))
             },
             "<=" => {
-                Ok(crate::tokens::Literal::BOOL(left <= right))
+                Ok(Object::BOOL(left <= right))
             },
             ">" => {
-                Ok(crate::tokens::Literal::BOOL(left > right))
+                Ok(Object::BOOL(left > right))
             }
             "<" => {
-                Ok(crate::tokens::Literal::BOOL(left < right))
+                Ok(Object::BOOL(left < right))
             },
             "+" => {
                 let res = left.clone() + right.clone();
@@ -148,13 +149,13 @@ impl Eval for Binary {
 }
 
 impl Eval for Unary {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         let op = &self.operator.lexeme;
         let expr = self.expression.eval(env.clone())?;
         match &**op {
             "-" => {
                 match expr {
-                    crate::tokens::Literal::NUMERIC(x) => Ok(crate::tokens::Literal::NUMERIC(-x)),
+                    Object::NUMERIC(x) => Ok(Object::NUMERIC(-x)),
                     _ => {
                         let error_message = format!("invalid right hand side expression for operator {}", op);
                         crate::error("Parsing error", &error_message, self.operator.line);  
@@ -164,7 +165,7 @@ impl Eval for Unary {
             },
             "!" => {
                 match expr {
-                    crate::tokens::Literal::BOOL(x) => Ok(crate::tokens::Literal::BOOL(!x)),
+                    Object::BOOL(x) => Ok(Object::BOOL(!x)),
                     _ => {
                         let error_message = format!("invalid right hand side expression for operator {}", op);
                         crate::error("Parsing error", &error_message, self.operator.line);  
@@ -181,25 +182,25 @@ impl Eval for Unary {
 }
 
 impl Eval for Literal {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         Ok(self.value.clone())
     }
 }
 
 impl Eval for Grouping {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         self.expression.eval(env)
     }
 } 
 
 impl Eval for Variable {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         env.borrow().get(self.identifier.clone())
     }
 }
 
 impl Eval for Assignment {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         let value = self.value.eval(env.clone());
         match value {
             Ok(x) => env.borrow_mut().assign(self.var.identifier.clone(), x.clone()),
@@ -288,7 +289,7 @@ impl LogicalExpr {
 }
 
 impl Eval for LogicalExpr {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         let left = self.left.eval(env.clone())?;
         let right = self.right.eval(env.clone())?;
         let op = &self.operator.t;
@@ -347,7 +348,7 @@ impl ExprStmt {
 }
 
 impl Eval for ExprStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         match self.body.eval(env) {
             Err(e) => Err(e),
             Ok(res) => Ok(res),
@@ -367,11 +368,11 @@ impl PrintStmt {
 }
 
 impl Eval for PrintStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         match self.value.eval(env) {
             Ok(val) => {
                 println!("{}", val);
-                Ok(crate::tokens::Literal::NIL)
+                Ok(Object::NIL)
             },
             Err(e) => Err(e),
         }
@@ -391,13 +392,13 @@ impl VarDeclaration {
 }
 
 impl Eval for VarDeclaration {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         let value = self.value.eval(env.clone());
         match value {
             Ok(x) => {
                 match env.borrow_mut().add(self.identifier.clone(), x) {
                     Err(e) => Err(e),
-                    Ok(_) => Ok(crate::tokens::Literal::NIL),
+                    Ok(_) => Ok(Object::NIL),
                 }
             },
             Err(e) => Err(e)
@@ -417,7 +418,7 @@ impl BlockStmt {
 }
 
 impl Eval for BlockStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
         interpret(&self.statements, enclosing)
     }
@@ -437,13 +438,13 @@ impl IfStmt {
 }
 
 impl Eval for IfStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
-        if self.condition.eval(env.clone()).unwrap() == crate::tokens::Literal::BOOL(true) {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+        if self.condition.eval(env.clone()).unwrap() == Object::BOOL(true) {
             return self.expr.eval(env);
         }
         match &self.else_stmt {
             Some(stmt) => stmt.eval(env),
-            None => Ok(crate::tokens::Literal::NIL), 
+            None => Ok(Object::NIL), 
         }
     }
 }
@@ -461,18 +462,18 @@ impl WhileLoop {
 }
 
 impl Eval for WhileLoop {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
-        let mut ret: Result<crate::tokens::Literal, String> = Ok(crate::tokens::Literal::NIL);
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+        let mut ret: Result<Object, String> = Ok(Object::NIL);
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
 
-        while self.condition.eval(env.clone())? == crate::tokens::Literal::BOOL(true) {
+        while self.condition.eval(env.clone())? == Object::BOOL(true) {
             for stmt in &self.body.statements {
                 let ret = stmt.eval(enclosing.clone());
                 match ret {
                     Ok(_) => {},
                     Err(e) => {
                         if e == String::from("'break' outside loop") {
-                            return Ok(crate::tokens::Literal::NIL);
+                            return Ok(Object::NIL);
                         } else if e == String::from("'continue' outside loop") {
                             break;
                         } else {
@@ -482,7 +483,7 @@ impl Eval for WhileLoop {
                 }
             }
         }
-        Ok(crate::tokens::Literal::NIL)
+        Ok(Object::NIL)
     }
 }
 
@@ -499,7 +500,7 @@ impl Break {
 }
 
 impl Eval for Break {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         Err("'break' outside loop".into())
     }
 }
@@ -516,14 +517,7 @@ impl Continue {
 }
 
 impl Eval for Continue {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<crate::tokens::Literal, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         Err("'continue' outside loop".into())
     }
 }
-
-
-
-
-
-
-
