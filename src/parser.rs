@@ -90,6 +90,7 @@ impl Parser {
         let keyword = self.peek().t;
         let dec = match keyword {
             TokenType::VAR => self.var_declaration(),
+            TokenType::FUN => self.function_declaration(),
             _ => self.statement()
         };
         match dec {
@@ -99,6 +100,30 @@ impl Parser {
                 Err(e)
             }
         }
+    }
+
+    // "fun" "(" args[] ")" block_stmt
+    fn function_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
+        self.advance(); // consume "fun" token
+        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after function declaration")?;
+        self.consume(TokenType::LEFT_PAREN, "Expect '(' after function declaration")?;
+
+        let mut arguments: Vec<Token> = Vec::new();
+        // for functions with no arguments, this statement is skipped
+        while !self.check_type(&TokenType::RIGHT_PAREN) {
+            if arguments.len() >= (255 as usize) {
+                crate::error("ParsingError", "Max argument len reached (255)", self.peek().line);
+                return Err("Max argument len reached (255)".into());
+            }
+            arguments.push(self.advance());
+            while self.check_type(&TokenType::COMMA) {
+                self.advance(); // consume ','
+                arguments.push(self.advance());
+            }
+        }
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
+        let fbody = self.block_statement()?;
+        Ok(Box::new(AST::FunDeclaration::new(identifier, arguments, fbody)))
     }
 
     // var identifier = expr; | var identifier;
@@ -399,10 +424,42 @@ impl Parser {
                 Err(right) => return Err(right),
             }
         }
+        match self.function_call() {
+            Err(e) => {
+                self.synchronize();
+                Err(e)
+            },
+            Ok(expr) => Ok(expr),
+        }
+    }
+
+    // grammar supports curried functions
+    fn function_call(&mut self) -> Result<Box<dyn Eval>, String> {
         match self.primary() {
-            Ok(x) => return Ok(x),
-            Err(x) => return Err(x),
-        } 
+            Ok(mut expr) => {
+                while self.check_type(&TokenType::LEFT_PAREN) {
+                    self.advance(); // consume left parenthesis
+                    // arg vec
+                    let mut arguments: Vec<Box<dyn Eval>> = Vec::new();
+                    // for functions with no arguments, this statement is skipped
+                    if !self.check_type(&TokenType::RIGHT_PAREN) {
+                        if arguments.len() >= (255 as usize) {
+                            crate::error("ParsingError", "Max argument len reached (255)", self.peek().line);
+                            return Err("Max argument len reached (255)".into());
+                        }
+                        arguments.push(self.expression()?);
+                        while self.check_type(&TokenType::COMMA) {
+                            self.advance();
+                            arguments.push(self.expression()?);
+                        }
+                    }
+                    let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
+                    expr = Box::new(AST::FunctionCall::new(expr, paren, arguments));
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
+        }
     }
 
     // either returns literal value of the expression or another expression wrapped in parentheses

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::object::Object;
+use crate::object::{Object, Function, Callable};
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
 use crate::interpreter::interpret;
@@ -333,6 +333,42 @@ impl Eval for LogicalExpr {
     }
 }
 
+// function call
+pub struct FunctionCall {
+    callee: Box<dyn Eval>,
+    paren: Token,
+    arguments: Vec<Box<dyn Eval>>
+}
+
+impl FunctionCall {
+    pub fn new(callee: Box<dyn Eval>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
+        FunctionCall {callee, paren, arguments}
+    }
+}
+
+impl Eval for FunctionCall {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+        let f = match self.callee.eval(env.clone()) {
+            Ok(obj) => {
+                match obj {
+                    Object::FUN(f) => f,
+                    _ => {
+                        crate::error("TypeError", &format!("type '{}' is not callable", obj.get_type()), self.paren.line);
+                        return Err("type not callable".into());
+                    },
+                }
+            },
+            Err(e) => return Err(e),
+        };
+        let mut args: Vec<Object> = Vec::new();
+        // evaluate the list of arguments
+        for arg in &self.arguments {
+           args.push(arg.eval(env.clone())?);
+        }
+        f.call(args, env.clone(), self.paren.clone())
+    }
+}
+
 
 /* Statements */
 
@@ -408,7 +444,7 @@ impl Eval for VarDeclaration {
 
 // block statement
 pub struct BlockStmt {
-    statements: Vec<Box<dyn Eval>>,
+    pub statements: Vec<Box<dyn Eval>>,
 }
 
 impl BlockStmt {
@@ -519,5 +555,28 @@ impl Continue {
 impl Eval for Continue {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
         Err("'continue' outside loop".into())
+    }
+}
+
+// function declaration
+
+pub struct FunDeclaration {
+    identifier: Token,
+    f: Function,
+}
+
+impl FunDeclaration {
+    pub fn new(identifier: Token, args: Vec<Token>, body: BlockStmt) -> Self {
+        let args: Vec<String> = args.iter().map(|x| x.lexeme.clone()).collect();
+        let f = Function::new(identifier.lexeme.clone(), identifier.line, Rc::new(RefCell::new(body)), args);
+        FunDeclaration {identifier, f}
+    }
+}
+
+impl Eval for FunDeclaration {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+        // add function declaration to the symbol table
+        env.borrow_mut().add(self.identifier.clone(), Object::FUN(self.f.clone()))?;
+        Ok(Object::NIL)
     }
 }
