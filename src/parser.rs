@@ -106,6 +106,7 @@ impl Parser {
     // "fun" "(" args[] ")" block_stmt
     fn function_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume "fun" token
+        self.function_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after function declaration")?;
         self.consume(TokenType::LEFT_PAREN, "Expect '(' after function declaration")?;
 
@@ -124,6 +125,7 @@ impl Parser {
         }
         self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
         let fbody = self.block_statement()?;
+        self.function_counter -= 1;
         Ok(Box::new(AST::FunDeclaration::new(identifier, arguments, fbody)))
     }
 
@@ -275,6 +277,11 @@ impl Parser {
 
     fn return_statement(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume 'return' token
+        if self.function_counter < 1 {
+            crate::error("SyntaxError", "return statement outside of function statement", self.peek().line);
+            self.synchronize();
+            return Err("return statement outside of function".into());
+        }
         // default return value nil
         let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Object::NIL, TokenType::NIL, self.previous().line)).unwrap());
         if !self.check_type(&TokenType::SEMICOLON) {

@@ -68,8 +68,12 @@ mod tests {
     fn function_test() -> Result<(), String> {
         let env = Rc::new(RefCell::new(Environment::new(None)));
         assert_eq!(Object::NUMERIC(42.0), crate::run("fun f() { 42 } f()".to_string(), env.clone())?);
+        assert_eq!(Object::NUMERIC(377.0), crate::run("fun fib(n) { if n < 2 { return n; } return fib(n-1) + fib(n-2); } fib(14)".to_string(), env.clone())?);
         assert!(crate::run("fun f() {} f(1)".to_string(), env.clone()).is_err()); // argc mismatch
         assert!(crate::run("fun f(x) {} f()".to_string(), env.clone()).is_err()); // argc mismatch
+        assert!(crate::run("return 42;".to_string(), env.clone()).is_err()); // return outside of function
+        assert_eq!(Object::NUMERIC(13.0), crate::run("fun foo() { fun bar() { return 13; } return bar(); } foo()".to_string(), env.clone())?);
+        assert!(crate::run("fun foo() { fun bar() { return 13; } return bar(); } bar()".to_string(), env.clone()).is_err()); // undefined function
         Ok(())
     }
 }

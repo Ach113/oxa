@@ -32,7 +32,6 @@ fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
     match interpret(&statements, env) {
         Ok(x) => Ok(x),
         Err(e) => {
-            println!("{:?}", e);
             Err(e.to_string())
         },
     }
