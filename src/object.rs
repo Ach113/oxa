@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use crate::AST::BlockStmt;
+use crate::AST::{BlockStmt, Error};
 use crate::interpreter::interpret;
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
@@ -41,7 +41,6 @@ impl PartialEq for Object {
         }
     }
 }
-
 
 impl PartialOrd for Object {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -178,7 +177,7 @@ impl Object {
 /*** FUNCTION ***/
 
 pub trait Callable {
-    fn call(&self, args: Vec<Object>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Object, String>;
+    fn call(&self, args: Vec<Object>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Object, Error>;
 }
 
 #[derive(Clone)]
@@ -206,10 +205,10 @@ impl fmt::Debug for Function {
 }
 
 impl Callable for Function {
-    fn call(&self, args: Vec<Object>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Object, String> {
+    fn call(&self, args: Vec<Object>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Object, Error> {
         if args.len() != self.arity {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
-            return Err("function arity error".into());
+            return Err(Error::STRING("function arity error".into()));
         }
         // new scope for the function
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
@@ -218,6 +217,14 @@ impl Callable for Function {
             let t = Token::new(identifier.clone(), Object::NIL, TokenType::IDENTIFIER, self.address);
             enclosing.borrow_mut().add(t, value.clone());
         }
-        interpret(&(self.body.borrow().statements), enclosing)
+        match interpret(&(self.body.borrow().statements), enclosing) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                match e {
+                    Error::RETURN(x) => Ok(x),
+                    _ => Err(e),
+                }
+            }
+        }
     }
 }

@@ -1,16 +1,37 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::fmt;
 
 use crate::object::{Object, Function, Callable};
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
 use crate::interpreter::interpret;
 
+// AST error type
+#[derive(Debug)]
+pub enum Error {
+    STRING(String),
+    BREAK,
+    CONTINUE,
+    RETURN(Object),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::STRING(x) => write!(f, "{}", x),
+            Error::BREAK => write!(f, "continue"),
+            Error::CONTINUE => write!(f, "break"),
+            Error::RETURN(x) => write!(f, "return {}", x),
+        }
+    }
+}
+
 /* Expression */
 
 // generic expression trait
 pub trait Eval {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String>;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error>;
 }
 
 // binary expression
@@ -51,7 +72,7 @@ pub struct Assignment {
 /*** eval implementations ***/
 
 impl Eval for Binary {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let op = &self.operator.lexeme;
         let left = self.left.eval(env.clone())?;
         let right = self.right.eval(env.clone())?;
@@ -82,7 +103,7 @@ impl Eval for Binary {
                     Err(_) => {
                         let error_message = format!("Invalid operand type(s) for +: {}, {}", left.get_type(), right.get_type());
                         crate::error("TypeError", &error_message, self.operator.line);
-                        Err(error_message.into())
+                        Err(Error::STRING(error_message.into()))
                     }
                 }
             },
@@ -93,7 +114,7 @@ impl Eval for Binary {
                     Err(_) => {
                         let error_message = format!("Invalid operand type(s) for -: {}, {}", left.get_type(), right.get_type());
                         crate::error("TypeError", &error_message, self.operator.line);
-                        Err(error_message.into())
+                        Err(Error::STRING(error_message.into()))
                     }
                 }
             },
@@ -104,11 +125,11 @@ impl Eval for Binary {
                     Err(x) => {
                         if x == String::from("ZeroDivisionError") {
                             crate::error("ZeroDivisionError", "division by zero", self.operator.line);
-                            Err("ZeroDivisionError".into())
+                            Err(Error::STRING("ZeroDivisionError".into()))
                         } else {
                             let error_message = format!("Invalid operand type(s) for /: {}, {}", left.get_type(), right.get_type());
                             crate::error("TypeError", &error_message, self.operator.line);
-                            Err(error_message.into())      
+                            Err(Error::STRING(error_message.into()))
                         }               
                     }
                 }
@@ -120,11 +141,11 @@ impl Eval for Binary {
                     Err(x) => {
                         if x == String::from("ZeroDivisionError") {
                             crate::error("ZeroDivisionError", "modulo division by zero", self.operator.line);
-                            Err("ZeroDivisionError".into())
+                            Err(Error::STRING("ZeroDivisionError".into()))
                         } else {
                             let error_message = format!("Invalid operand type(s) for %: {}, {}", left.get_type(), right.get_type());
                             crate::error("TypeError", &error_message, self.operator.line);
-                            Err(error_message.into())      
+                            Err(Error::STRING(error_message.into()))
                         }               
                     }
                 }
@@ -136,20 +157,20 @@ impl Eval for Binary {
                     Err(_) => {
                         let error_message = format!("Invalid operand type(s) for *: {}, {}", left.get_type(), right.get_type());
                         crate::error("TypeError", &error_message, self.operator.line);
-                        Err(error_message.into())   
+                        Err(Error::STRING(error_message.into()))
                     }
                 }
             },
             _ => {
                 crate::error("Parsing Error", &format!("Unsupported binary operator {}", op.clone()), self.operator.line);
-                Err(format!("Unsupported binary operator {}", op).into())
+                Err(Error::STRING(format!("Unsupported binary operator {}", op).into()))
             }
         }
     }
 }
 
 impl Eval for Unary {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let op = &self.operator.lexeme;
         let expr = self.expression.eval(env.clone())?;
         match &**op {
@@ -159,7 +180,7 @@ impl Eval for Unary {
                     _ => {
                         let error_message = format!("invalid right hand side expression for operator {}", op);
                         crate::error("Parsing error", &error_message, self.operator.line);  
-                        Err(error_message.into())   
+                        Err(Error::STRING(error_message.into())) 
                     }
                 }
             },
@@ -169,42 +190,42 @@ impl Eval for Unary {
                     _ => {
                         let error_message = format!("invalid right hand side expression for operator {}", op);
                         crate::error("Parsing error", &error_message, self.operator.line);  
-                        Err(error_message.into())   
+                        Err(Error::STRING(error_message.into()))   
                     }
                 }
             },
             _ =>  {
                 crate::error("Parsing error", &format!("invalid unary operator '{}'", op.clone()), self.operator.line);
-                Err(format!("invalid unary operator '{}'", op).into())
+                Err(Error::STRING(format!("invalid unary operator '{}'", op).into()))
             }
         }
     }
 }
 
 impl Eval for Literal {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         Ok(self.value.clone())
     }
 }
 
 impl Eval for Grouping {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         self.expression.eval(env)
     }
 } 
 
 impl Eval for Variable {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         env.borrow().get(self.identifier.clone())
     }
 }
 
 impl Eval for Assignment {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let value = self.value.eval(env.clone());
         match value {
             Ok(x) => env.borrow_mut().assign(self.var.identifier.clone(), x.clone()),
-            Err(_) => Err("".into())
+            Err(_) => Err(Error::STRING("".into()))
         }
     }
 }
@@ -276,12 +297,12 @@ pub struct LogicalExpr {
 }
 
 impl LogicalExpr {
-    pub fn new(operator: Token, left: Box<dyn Eval>, right: Box<dyn Eval>) -> Result<Self, String> {
+    pub fn new(operator: Token, left: Box<dyn Eval>, right: Box<dyn Eval>) -> Result<Self, Error> {
         match &operator.t {
             TokenType::OR | TokenType::AND | TokenType::XOR => {},
             _ => {
                 crate::error("SyntaxError", &format!("Invalid logical operator '{}'", operator), operator.line);
-                return Err(format!("SyntaxError: invalid logical operator '{}'", operator).into());
+                return Err(Error::STRING(format!("SyntaxError: invalid logical operator '{}'", operator)));
             },
         }
         Ok(LogicalExpr {operator, left, right})
@@ -289,7 +310,7 @@ impl LogicalExpr {
 }
 
 impl Eval for LogicalExpr {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let left = self.left.eval(env.clone())?;
         let right = self.right.eval(env.clone())?;
         let op = &self.operator.t;
@@ -301,7 +322,7 @@ impl Eval for LogicalExpr {
                     Err(_) => {
                         let error_message = format!("Invalid operand type(s) for 'or': {}, {}", left.get_type(), right.get_type());
                         crate::error("TypeError", &error_message, self.operator.line);
-                        Err(error_message.into())
+                        Err(Error::STRING(error_message.into()))
                     }
                 }
             },
@@ -311,7 +332,7 @@ impl Eval for LogicalExpr {
                     Err(_) => {
                         let error_message = format!("Invalid operand type(s) for 'and': {}, {}", left.get_type(), right.get_type());
                         crate::error("TypeError", &error_message, self.operator.line);
-                        Err(error_message.into())
+                        Err(Error::STRING(error_message.into()))
                     }
                 }
             },
@@ -321,13 +342,13 @@ impl Eval for LogicalExpr {
                     Err(_) => {
                         let error_message = format!("Invalid operand type(s) for 'xor': {}, {}", left.get_type(), right.get_type());
                         crate::error("TypeError", &error_message, self.operator.line);
-                        Err(error_message.into())
+                        Err(Error::STRING(error_message.into()))
                     }
                 }
             },
             _ => {
                 crate::error("SyntaxError", &format!("Invalid logical operator '{}'", self.operator), self.operator.line);
-                Err(format!("SyntaxError: invalid operator '{}'", self.operator).into())
+                Err(Error::STRING(format!("SyntaxError: invalid operator '{}'", self.operator).into()))
             }
         }
     }
@@ -347,14 +368,14 @@ impl FunctionCall {
 }
 
 impl Eval for FunctionCall {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let f = match self.callee.eval(env.clone()) {
             Ok(obj) => {
                 match obj {
                     Object::FUN(f) => f,
                     _ => {
                         crate::error("TypeError", &format!("type '{}' is not callable", obj.get_type()), self.paren.line);
-                        return Err("type not callable".into());
+                        return Err(Error::STRING("type not callable".into()));
                     },
                 }
             },
@@ -384,7 +405,7 @@ impl ExprStmt {
 }
 
 impl Eval for ExprStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         match self.body.eval(env) {
             Err(e) => Err(e),
             Ok(res) => Ok(res),
@@ -404,7 +425,7 @@ impl PrintStmt {
 }
 
 impl Eval for PrintStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         match self.value.eval(env) {
             Ok(val) => {
                 println!("{}", val);
@@ -428,7 +449,7 @@ impl VarDeclaration {
 }
 
 impl Eval for VarDeclaration {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let value = self.value.eval(env.clone());
         match value {
             Ok(x) => {
@@ -454,7 +475,7 @@ impl BlockStmt {
 }
 
 impl Eval for BlockStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
         interpret(&self.statements, enclosing)
     }
@@ -474,7 +495,7 @@ impl IfStmt {
 }
 
 impl Eval for IfStmt {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         if self.condition.eval(env.clone()).unwrap() == Object::BOOL(true) {
             return self.expr.eval(env);
         }
@@ -498,8 +519,8 @@ impl WhileLoop {
 }
 
 impl Eval for WhileLoop {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
-        let mut ret: Result<Object, String> = Ok(Object::NIL);
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
+        let mut ret: Result<Object, Error> = Ok(Object::NIL);
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
 
         while self.condition.eval(env.clone())? == Object::BOOL(true) {
@@ -508,12 +529,10 @@ impl Eval for WhileLoop {
                 match ret {
                     Ok(_) => {},
                     Err(e) => {
-                        if e == String::from("'break' outside loop") {
-                            return Ok(Object::NIL);
-                        } else if e == String::from("'continue' outside loop") {
-                            break;
-                        } else {
-                            return Err(e);
+                        match e {
+                            Error::BREAK => return Ok(Object::NIL),
+                            Error::CONTINUE => break,
+                            _ => return Err(e),
                         }
                     },
                 }
@@ -536,8 +555,8 @@ impl Break {
 }
 
 impl Eval for Break {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
-        Err("'break' outside loop".into())
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
+        Err(Error::BREAK)
     }
 }
 
@@ -553,8 +572,8 @@ impl Continue {
 }
 
 impl Eval for Continue {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
-        Err("'continue' outside loop".into())
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
+        Err(Error::CONTINUE)
     }
 }
 
@@ -574,9 +593,26 @@ impl FunDeclaration {
 }
 
 impl Eval for FunDeclaration {
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
         // add function declaration to the symbol table
         env.borrow_mut().add(self.identifier.clone(), Object::FUN(self.f.clone()))?;
         Ok(Object::NIL)
+    }
+}
+
+// return statement
+pub struct Return {
+    expr: Box<dyn Eval>
+}
+
+impl Return {
+    pub fn new(expr:Box<dyn Eval>) -> Self {
+        Return {expr}
+    }
+}
+
+impl Eval for Return {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Object, Error> {
+        Err(Error::RETURN(self.expr.eval(env.clone())?))
     }
 }

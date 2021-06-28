@@ -14,12 +14,13 @@ pub struct Parser {
     tokens: Vec<Token>,
     current: u32,
     loop_counter: u32,
+    function_counter: u32,
 }
 
 impl Parser {
     // constructor
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {tokens: tokens, current: 0, loop_counter: 0}
+        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0}
     }
     /*** helper functions ***/
 
@@ -73,7 +74,7 @@ impl Parser {
             // declarations have highest precendance
             match self.declaration() {
                 Ok(stmt) => stmt_vec.push(stmt),
-                Err(e) => {
+                Err(_) => {
                     error = true
                 },
             }
@@ -157,6 +158,7 @@ impl Parser {
         match self.peek().t {
             TokenType::IF => self.if_statement(),
             TokenType::PRINT => self.print_statement(),
+            TokenType::RETURN => self.return_statement(),
             TokenType::WHILE => self.while_loop(),
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
@@ -269,6 +271,17 @@ impl Parser {
             Ok(_) => Ok(Box::new(AST::PrintStmt::new(expr))),
             Err(e) => Err(e),
         }
+    }
+
+    fn return_statement(&mut self) -> Result<Box<dyn Eval>, String> {
+        self.advance(); // consume 'return' token
+        // default return value nil
+        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Object::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        if !self.check_type(&TokenType::SEMICOLON) {
+            value = self.expression()?;
+        }
+        self.consume(TokenType::SEMICOLON, "Expect ';' after expression")?;
+        Ok(Box::new(AST::Return::new(value)))
     }
 
     fn expression_stmt(&mut self) -> Result<Box<dyn Eval>, String> {
