@@ -1,7 +1,9 @@
+use std::any::type_name;
+
 use crate::tokens::{Token, TokenType};
 use crate::AST;
 use crate::AST::Eval;
-use crate::object::Object;
+use crate::types::{Type, Function};
 
 // operators supported by each type of expression
 const EQUALITIES: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
@@ -9,6 +11,10 @@ const COMPARISONS: [TokenType; 4] = [TokenType::GREATER, TokenType::GREATER_EQUA
 const TERMS: [TokenType; 2] = [TokenType::PLUS, TokenType::MINUS];
 const FACTORS: [TokenType; 3] = [TokenType::STAR, TokenType::SLASH, TokenType::PERCENT];
 const UNARIES: [TokenType; 2] = [TokenType::BANG, TokenType::MINUS];
+
+fn type_of<T>(_: T) -> &'static str {
+    type_name::<T>()
+}
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -89,22 +95,35 @@ impl Parser {
     // otherwise matches other statement types
     fn declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         let keyword = self.peek().t;
-        let dec = match keyword {
+        match keyword {
             TokenType::VAR => self.var_declaration(),
-            TokenType::FUN => self.function_declaration(),
+            TokenType::FUN => {
+                match self.function_declaration() {
+                    Err(e) => Err(e),
+                    Ok(f) => Ok(Box::new(f)),
+                }
+            },
+            TokenType::CLASS => self.class_declaration(),
             _ => self.statement()
-        };
-        match dec {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                //self.synchronize();
-                Err(e)
-            }
         }
     }
 
-    // "fun" "(" args[] ")" block_stmt
-    fn function_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
+    // "class" identifier "{" function* "}"
+    fn class_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
+        self.advance(); // consume "class" token
+        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after class declaration")?;
+        self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body")?;
+
+        let mut methods: Vec<Function> = Vec::new();
+        while !self.check_type(&TokenType::RIGHT_BRACE) {
+            methods.push((self.function_declaration()?).f.clone());
+        }
+        self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body")?;
+        Ok(Box::new(AST::ClassDeclr::new(identifier, methods)))
+    }
+
+    // "fun" identifier "(" args[] ")" block_stmt
+    fn function_declaration(&mut self) -> Result<AST::FunDeclaration, String> {
         self.advance(); // consume "fun" token
         self.function_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after function declaration")?;
@@ -126,32 +145,31 @@ impl Parser {
         self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
         let fbody = self.block_statement()?;
         self.function_counter -= 1;
-        Ok(Box::new(AST::FunDeclaration::new(identifier, arguments, fbody)))
+        
+        Ok(AST::FunDeclaration::new(identifier, arguments, fbody))
     }
 
     // var identifier = expr; | var identifier;
     fn var_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume var token
-        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier");
-        if identifier.is_err() {
-            return Err("Expected identifier".into());
-        }
+        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier")?;
+
         // initial value of the variable (null)
-        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Object::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Type::NIL, TokenType::NIL, self.previous().line)).unwrap());
         // check if any assignment is being performed
         if self.check_type(&TokenType::EQUAL) {
             self.advance(); // consume "=" token
             let expr = self.expression();
             if expr.is_err() {
-                crate::error("SyntaxError", "Invalid variable assignment", self.previous().line);
-                return Err("Invalid variable assignment".into());
+                crate::error("SyntaxError", "Invalid variable declaration", self.previous().line);
+                return Err("Invalid variable declaration".into());
             } else {
                 value = expr.unwrap();
             }
         }
         // check for semicolon
         match self.consume(TokenType::SEMICOLON, "Expect ';' after expression") {
-            Ok(res) => Ok(Box::new(AST::VarDeclaration::new(identifier.unwrap(), value))),
+            Ok(res) => Ok(Box::new(AST::VarDeclaration::new(identifier, value))),
             Err(e) => Err(e),
         }
     }
@@ -283,7 +301,7 @@ impl Parser {
             return Err("return statement outside of function".into());
         }
         // default return value nil
-        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Object::NIL, TokenType::NIL, self.previous().line)).unwrap());
+        let mut value: Box<dyn Eval> = Box::new(AST::Literal::new(Token::new("nil".to_string(), Type::NIL, TokenType::NIL, self.previous().line)).unwrap());
         if !self.check_type(&TokenType::SEMICOLON) {
             value = self.expression()?;
         }
@@ -311,23 +329,44 @@ impl Parser {
 
     // expression with lowest precendence
     fn assignment(&mut self) -> Result<Box<dyn Eval>, String> {
-        if self.next(TokenType::EQUAL) {
-            let lhs = self.advance(); // target variable
-            if lhs.t != TokenType::IDENTIFIER {
-                crate::error("SyntaxError", "invalid target variable for assignment", lhs.line);
-                Err("invalid target variable for assignment".into())
-            } else {
-                self.advance(); // consume "=" token
-                let rhs = self.assignment();
-                if rhs.is_err() {
-                    crate::error("SyntaxError", "invalid rhs for assignment", lhs.line);
-                    Err("invalid rhs for assignment".into())
-                } else {
-                    Ok(Box::new(AST::Assignment::new(AST::Variable::new(lhs.clone()), rhs.unwrap())))
+        let t = self.peek();
+        let ret_index = self.current; // index to jump to
+
+        let expr = self.logical_or()?;
+        if self.check_type(&TokenType::EQUAL) {
+            let equals = self.advance(); // '='
+
+            if expr.get_type() == String::from("Variable") {
+                match self.assignment() {
+                    Err(e) => {
+                        crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
+                        return Err("invalid rhs for assignment".into());
+                    },
+                    Ok(rhs) => { 
+                        return Ok(Box::new(AST::Assignment::new(t, rhs)));
+                    },
                 }
+            } else if expr.get_type() == String::from("Getter") {
+                self.current = ret_index;
+                let expr = self.primary()?;
+                self.advance(); // consume '.'
+                let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
+                self.advance(); // consume '='
+                match self.assignment() {
+                    Err(e) => {
+                        crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
+                        return Err("invalid rhs for assignment".into());
+                    },
+                    Ok(rhs) => { 
+                        return Ok(Box::new(AST::Set::new(name, expr, rhs)));
+                    },
+                }
+            } else {
+                crate::error("SyntaxError", "invalid target variable for assignment", equals.line);
+                return Err("invalid target variable for assignment".into());
             }
         } else {
-            self.logical_or()
+            return Ok(expr);
         }
     }
 
@@ -457,24 +496,32 @@ impl Parser {
     fn function_call(&mut self) -> Result<Box<dyn Eval>, String> {
         match self.primary() {
             Ok(mut expr) => {
-                while self.check_type(&TokenType::LEFT_PAREN) {
-                    self.advance(); // consume left parenthesis
-                    // arg vec
-                    let mut arguments: Vec<Box<dyn Eval>> = Vec::new();
-                    // for functions with no arguments, this statement is skipped
-                    if !self.check_type(&TokenType::RIGHT_PAREN) {
-                        if arguments.len() >= (255 as usize) {
-                            crate::error("ParsingError", "Max argument len reached (255)", self.peek().line);
-                            return Err("Max argument len reached (255)".into());
-                        }
-                        arguments.push(self.expression()?);
-                        while self.check_type(&TokenType::COMMA) {
-                            self.advance();
+                loop {
+                    if self.check_type(&TokenType::LEFT_PAREN) {
+                        self.advance(); // consume left parenthesis
+                        // arg vec
+                        let mut arguments: Vec<Box<dyn Eval>> = Vec::new();
+                        // for functions with no arguments, this statement is skipped
+                        if !self.check_type(&TokenType::RIGHT_PAREN) {
+                            if arguments.len() >= (255 as usize) {
+                                crate::error("ParsingError", "Max argument len reached (255)", self.peek().line);
+                                return Err("Max argument len reached (255)".into());
+                            }
                             arguments.push(self.expression()?);
+                            while self.check_type(&TokenType::COMMA) {
+                                self.advance();
+                                arguments.push(self.expression()?);
+                            }
                         }
+                        let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
+                        expr = Box::new(AST::FunctionCall::new(expr, paren, arguments));
+                    } else if self.check_type(&TokenType::DOT) {
+                        self.advance(); // consume '.'
+                        let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
+                        expr = Box::new(AST::Get::new(name, expr));
+                    } else {
+                        break;
                     }
-                    let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
-                    expr = Box::new(AST::FunctionCall::new(expr, paren, arguments));
                 }
                 Ok(expr)
             },
@@ -561,11 +608,7 @@ impl Parser {
 
     // when error is encountered, consumes all tokens until the start of new statement, to avoid redundant errors
     fn synchronize(&mut self) {
-        //println!("{}",self.advance());
-
         while !self.at_end() {
-            //if self.previous().t == TokenType::SEMICOLON { return; }
-            //if self.previous().t == TokenType::RIGHT_BRACE { return; }
             // start of new statement is indicated by following token types
             match self.peek().t {
                 TokenType::CLASS | TokenType::FUN | TokenType::VAR | TokenType::FOR | TokenType::IF | TokenType::WHILE | TokenType::PRINT | TokenType::RETURN => {

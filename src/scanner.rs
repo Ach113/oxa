@@ -1,5 +1,5 @@
 use crate::tokens::{TokenType, Token};
-use crate::object::Object;
+use crate::types::Type;
 
 pub struct Scanner {
     source: Vec<char>,
@@ -44,27 +44,27 @@ impl Scanner {
         let identifier: String = self.source[start..end].iter().collect();
         // match the identifier with existing keywords
         match identifier.as_str() {
-            "while" => Token::new(identifier.to_string(), Object::NIL, TokenType::WHILE, self.line),
-            "and" => Token::new(identifier.to_string(), Object::NIL, TokenType::AND, self.line),
-            "or" => Token::new(identifier.to_string(), Object::NIL, TokenType::OR, self.line),
-            "class" => Token::new(identifier.to_string(), Object::NIL, TokenType::CLASS, self.line),
-            "fun" => Token::new(identifier.to_string(), Object::NIL, TokenType::FUN, self.line),
-            "for" => Token::new(identifier.to_string(), Object::NIL, TokenType::FOR, self.line),
-            "if" => Token::new(identifier.to_string(), Object::NIL, TokenType::IF, self.line),
-            "else" => Token::new(identifier.to_string(), Object::NIL, TokenType::ELSE, self.line),
-            "return" => Token::new(identifier.to_string(), Object::NIL, TokenType::RETURN, self.line),
-            "true" => Token::new(identifier.to_string(), Object::BOOL(true), TokenType::TRUE, self.line),
-            "false" => Token::new(identifier.to_string(), Object::BOOL(false), TokenType::FALSE, self.line),
-            "this" => Token::new(identifier.to_string(), Object::NIL, TokenType::THIS, self.line),
-            "var" => Token::new(identifier.to_string(), Object::NIL, TokenType::VAR, self.line),
-            "super" => Token::new(identifier.to_string(), Object::NIL, TokenType::SUPER, self.line),
-            "print" => Token::new(identifier.to_string(), Object::NIL, TokenType::PRINT, self.line),
-            "nil" => Token::new(identifier.to_string(), Object::NIL, TokenType::NIL, self.line),
-            "xor" => Token::new(identifier.to_string(), Object::NIL, TokenType::XOR, self.line),
-            "break" => Token::new(identifier.to_string(), Object::NIL, TokenType::BREAK, self.line),
-            "continue" => Token::new(identifier.to_string(), Object::NIL, TokenType::CONTINUE, self.line),
+            "while" => Token::new(identifier.to_string(), Type::NIL, TokenType::WHILE, self.line),
+            "and" => Token::new(identifier.to_string(), Type::NIL, TokenType::AND, self.line),
+            "or" => Token::new(identifier.to_string(), Type::NIL, TokenType::OR, self.line),
+            "class" => Token::new(identifier.to_string(), Type::NIL, TokenType::CLASS, self.line),
+            "fun" => Token::new(identifier.to_string(), Type::NIL, TokenType::FUN, self.line),
+            "for" => Token::new(identifier.to_string(), Type::NIL, TokenType::FOR, self.line),
+            "if" => Token::new(identifier.to_string(), Type::NIL, TokenType::IF, self.line),
+            "else" => Token::new(identifier.to_string(), Type::NIL, TokenType::ELSE, self.line),
+            "return" => Token::new(identifier.to_string(), Type::NIL, TokenType::RETURN, self.line),
+            "true" => Token::new(identifier.to_string(), Type::BOOL(true), TokenType::TRUE, self.line),
+            "false" => Token::new(identifier.to_string(), Type::BOOL(false), TokenType::FALSE, self.line),
+            "self" => Token::new(identifier.to_string(), Type::NIL, TokenType::SELF, self.line),
+            "var" => Token::new(identifier.to_string(), Type::NIL, TokenType::VAR, self.line),
+            "super" => Token::new(identifier.to_string(), Type::NIL, TokenType::SUPER, self.line),
+            "print" => Token::new(identifier.to_string(), Type::NIL, TokenType::PRINT, self.line),
+            "nil" => Token::new(identifier.to_string(), Type::NIL, TokenType::NIL, self.line),
+            "xor" => Token::new(identifier.to_string(), Type::NIL, TokenType::XOR, self.line),
+            "break" => Token::new(identifier.to_string(), Type::NIL, TokenType::BREAK, self.line),
+            "continue" => Token::new(identifier.to_string(), Type::NIL, TokenType::CONTINUE, self.line),
             _ => {
-                Token::new(identifier.to_string(), Object::NIL, TokenType::IDENTIFIER, self.line)
+                Token::new(identifier.to_string(), Type::NIL, TokenType::IDENTIFIER, self.line)
             },
         }
     }
@@ -139,48 +139,48 @@ impl Scanner {
         
         match c {
             // single char tokens
-            '(' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::LEFT_PAREN, self.line)),
-            ')' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::RIGHT_PAREN, self.line)),
-            '{' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::LEFT_BRACE, self.line)),
-            '}' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::RIGHT_BRACE, self.line)),
-            ',' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::COMMA, self.line)),
-            '.' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::DOT, self.line)),
-            '-' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::MINUS, self.line)),
-            '+' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::PLUS, self.line)),
-            ';' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::SEMICOLON, self.line)),
-            '*' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::STAR, self.line)),
-            '%' => self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::PERCENT, self.line)),
+            '(' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::LEFT_PAREN, self.line)),
+            ')' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::RIGHT_PAREN, self.line)),
+            '{' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::LEFT_BRACE, self.line)),
+            '}' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::RIGHT_BRACE, self.line)),
+            ',' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::COMMA, self.line)),
+            '.' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::DOT, self.line)),
+            '-' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::MINUS, self.line)),
+            '+' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::PLUS, self.line)),
+            ';' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::SEMICOLON, self.line)),
+            '*' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::STAR, self.line)),
+            '%' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::PERCENT, self.line)),
             // two char tokens
             '!' => self.tokens.push(
                 if self.next('=') {
                     self.current += 1;
-                    Token::new("!=".to_string(), Object::NIL, TokenType::BANG_EQUAL, self.line)
+                    Token::new("!=".to_string(), Type::NIL, TokenType::BANG_EQUAL, self.line)
                 } else {
-                    Token::new(c.to_string(), Object::NIL, TokenType::BANG, self.line)
+                    Token::new(c.to_string(), Type::NIL, TokenType::BANG, self.line)
                 }
             ),
             '<' => self.tokens.push(
                 if self.next('=') {
                     self.current += 1;
-                    Token::new("<=".to_string(), Object::NIL, TokenType::LESS_EQUAL, self.line)
+                    Token::new("<=".to_string(), Type::NIL, TokenType::LESS_EQUAL, self.line)
                 } else {
-                    Token::new(c.to_string(), Object::NIL, TokenType::LESS, self.line)
+                    Token::new(c.to_string(), Type::NIL, TokenType::LESS, self.line)
                 }
             ),
             '>' => self.tokens.push(
                 if self.next('=') {
                     self.current += 1;
-                    Token::new(">=".to_string(), Object::NIL, TokenType::GREATER_EQUAL, self.line)
+                    Token::new(">=".to_string(), Type::NIL, TokenType::GREATER_EQUAL, self.line)
                 } else {
-                    Token::new(c.to_string(), Object::NIL, TokenType::GREATER, self.line)
+                    Token::new(c.to_string(), Type::NIL, TokenType::GREATER, self.line)
                 }
             ),
             '=' => self.tokens.push(
                 if self.next('=') {
                     self.current += 1;
-                    Token::new("==".to_string(), Object::NIL, TokenType::EQUAL_EQUAL, self.line)
+                    Token::new("==".to_string(), Type::NIL, TokenType::EQUAL_EQUAL, self.line)
                 } else {
-                    Token::new(c.to_string(), Object::NIL, TokenType::EQUAL, self.line)
+                    Token::new(c.to_string(), Type::NIL, TokenType::EQUAL, self.line)
                 }
             ),
             // special case: '/' stands for division, while // stands for comment
@@ -193,13 +193,13 @@ impl Scanner {
                     self.multi_line_comment += 1;
                     self.current += 1;
                 } else {
-                    self.tokens.push(Token::new(c.to_string(), Object::NIL, TokenType::SLASH, self.line));
+                    self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::SLASH, self.line));
                 }
             },
             // strings
             '"' => {
                 if let Some(s) = self.get_string() {
-                    self.tokens.push(Token::new(s.clone(), Object::STRING(s.clone()), TokenType::STRING, self.line));
+                    self.tokens.push(Token::new(s.clone(), Type::STRING(s.clone()), TokenType::STRING, self.line));
                 }
             },
             '\n' => self.line += 1,
@@ -208,7 +208,7 @@ impl Scanner {
             _ => {
                 if c.is_digit(10) {
                     if let Some(n) = self.get_number() {
-                        self.tokens.push(Token::new(n.to_string(), Object::NUMERIC(n), TokenType::NUMBER, self.line));
+                        self.tokens.push(Token::new(n.to_string(), Type::NUMERIC(n), TokenType::NUMBER, self.line));
                     }
                 } else if c.is_alphabetic() {
                     let t = self.get_identifier();

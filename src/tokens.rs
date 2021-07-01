@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 
 use std::fmt;
-use crate::object::Object;
+use crate::types::Type;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -47,7 +47,7 @@ pub enum TokenType {
     PRINT, 
     RETURN, 
     SUPER, 
-    THIS, 
+    SELF, 
     TRUE, 
     VAR, 
     WHILE,
@@ -61,13 +61,13 @@ pub enum TokenType {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub lexeme: String,
-    pub literal: Object, // literals can be of type number, string, bool or nil
+    pub literal: Type, // literals can be of type number, string, bool or nil
     pub t: TokenType,
     pub line: u64,
 }
 
 impl Token {
-    pub fn new(lexeme: String, literal: Object, t: TokenType, line: u64) -> Token {
+    pub fn new(lexeme: String, literal: Type, t: TokenType, line: u64) -> Token {
         Token {lexeme, literal, t, line}
     }
 }

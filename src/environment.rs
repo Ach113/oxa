@@ -4,28 +4,28 @@ use std::rc::Rc;
 use std::fmt;
 
 use crate::tokens::Token;
-use crate::Object;
+use crate::types::Type;
 use crate::AST::Error;
 
 #[derive(Debug)]
 pub struct Environment {
     pub enclosing: Option<Rc<RefCell<Environment>>>, // for global scope this field is None
-    pub symbol_table: HashMap<String, Object>,
+    pub symbol_table: HashMap<String, Type>,
 }
 
 impl Environment {
     pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
-        let symbol_table: HashMap<String, Object> = HashMap::new();
+        let symbol_table: HashMap<String, Type> = HashMap::new();
         Environment {enclosing, symbol_table}
     }
 
-    pub fn add(&mut self, identifier: Token, value: Object) -> Result<(), Error> {
+    pub fn add(&mut self, identifier: Token, value: Type) -> Result<(), Error> {
         let name = &identifier.lexeme;
         self.symbol_table.insert(identifier.lexeme, value);
         Ok(())
     }
 
-    pub fn assign(&mut self, identifier: Token, value: Object) -> Result<Object, Error> {
+    pub fn assign(&mut self, identifier: Token, value: Type) -> Result<Type, Error> {
         let name = &identifier.lexeme;
         if self.symbol_table.contains_key(name) {
             self.symbol_table.insert(identifier.lexeme, value.clone());
@@ -41,7 +41,7 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, identifier: Token) -> Result<Object, Error> {
+    pub fn get(&self, identifier: Token) -> Result<Type, Error> {
         let name = &identifier.lexeme;
         let value = self.symbol_table.get(name);
         match value {

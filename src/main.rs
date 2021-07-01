@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 // modules made by yours truly
-mod object;
+mod types;
 mod tokens;
 mod scanner;
 mod AST;
@@ -15,12 +15,12 @@ mod tests;
 
 use scanner::Scanner;
 use parser::Parser;
-use object::Object;
+use types::Type;
 use interpreter::interpret;
 use environment::Environment;
 
 // executes given instruction/set of instructions
-fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+fn run(code: String, env: Rc<RefCell<Environment>>) -> Result<Type, String> {
     let mut scanner = Scanner::new(code);
     // scan scource code for tokens
     let tokens = scanner.scan_tokens();
@@ -63,7 +63,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
                 Err(_) => return Err("".into()),
                 Ok(x) => {
                     match x {
-                        Object::NIL => {},
+                        Type::NIL => {},
                         _ => println!("{}", x),
                     }
                 },
