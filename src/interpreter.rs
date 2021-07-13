@@ -1,19 +1,21 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use crate::AST::Eval;
+use crate::AST::{Eval, Error};
 use crate::environment::Environment;
-use crate::object::Object;
+use crate::types::Type;
 
-pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>) -> Result<Object, String> {
+pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
     let mut error_count: u32 = 0;
-    let mut res = Object::NIL;
+    let mut res = Type::NIL;
 
     for stmt in statements {
         match stmt.eval(env.clone()) {
             Err(e) => {
-                if e == String::from("'break' outside loop") || e == String::from("'continue' outside loop") {
-                    return Err(e);
+                match e {
+                    Error::BREAK | Error::CONTINUE => return Err(e),
+                    Error::RETURN(_) => return Err(e),
+                    _ => {},
                 }
                 error_count += 1; 
             },
@@ -21,7 +23,7 @@ pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>)
         }
     }
     if error_count > 0 {
-        Err("ParserError".into())
+        Err(Error::STRING("ParserError".into()))
     } else {
         Ok(res)
     }
