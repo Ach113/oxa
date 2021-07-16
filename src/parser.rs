@@ -1,5 +1,3 @@
-use std::any::type_name;
-
 use crate::tokens::{Token, TokenType};
 use crate::AST;
 use crate::AST::Eval;
@@ -12,21 +10,18 @@ const TERMS: [TokenType; 2] = [TokenType::PLUS, TokenType::MINUS];
 const FACTORS: [TokenType; 3] = [TokenType::STAR, TokenType::SLASH, TokenType::PERCENT];
 const UNARIES: [TokenType; 2] = [TokenType::BANG, TokenType::MINUS];
 
-fn type_of<T>(_: T) -> &'static str {
-    type_name::<T>()
-}
-
 pub struct Parser {
     tokens: Vec<Token>,
     current: u32,
     loop_counter: u32,
     function_counter: u32,
+    class_counter: u32,
 }
 
 impl Parser {
     // constructor
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0}
+        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0}
     }
     /*** helper functions ***/
 
@@ -111,6 +106,7 @@ impl Parser {
     // "class" identifier "{" function* "}"
     fn class_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume "class" token
+        self.class_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after class declaration")?;
         self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body")?;
 
@@ -119,6 +115,7 @@ impl Parser {
             methods.push((self.function_declaration()?).f.clone());
         }
         self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body")?;
+        self.class_counter -= 1;
         Ok(Box::new(AST::ClassDeclr::new(identifier, methods)))
     }
 
@@ -145,7 +142,7 @@ impl Parser {
         self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
         let fbody = self.block_statement()?;
         self.function_counter -= 1;
-        
+    
         Ok(AST::FunDeclaration::new(identifier, arguments, fbody))
     }
 
@@ -286,7 +283,7 @@ impl Parser {
     // print expr;
     fn print_statement(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume print token
-        let expr = self.expression().unwrap();
+        let expr = self.expression()?;
         match self.consume(TokenType::SEMICOLON, "Expect ';' after expression") {
             Ok(_) => Ok(Box::new(AST::PrintStmt::new(expr))),
             Err(e) => Err(e),
@@ -336,7 +333,7 @@ impl Parser {
         if self.check_type(&TokenType::EQUAL) {
             let equals = self.advance(); // '='
 
-            if expr.get_type() == String::from("Variable") {
+            if expr.get_type().contains("Variable") {
                 match self.assignment() {
                     Err(e) => {
                         crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
@@ -348,7 +345,7 @@ impl Parser {
                 }
             } else if expr.get_type() == String::from("Getter") {
                 self.current = ret_index;
-                let expr = self.primary()?;
+                let expr = self.primary()?; // callee object
                 self.advance(); // consume '.'
                 let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
                 self.advance(); // consume '='
@@ -494,6 +491,7 @@ impl Parser {
 
     // grammar supports curried functions
     fn function_call(&mut self) -> Result<Box<dyn Eval>, String> {
+        let ret_index = self.current;
         match self.primary() {
             Ok(mut expr) => {
                 loop {
@@ -514,7 +512,21 @@ impl Parser {
                             }
                         }
                         let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
-                        expr = Box::new(AST::FunctionCall::new(expr, paren, arguments));
+                        // method parsing
+                        if expr.get_type() == String::from("Getter") {
+                            self.current = ret_index;
+                            expr = self.primary()?;
+                            self.advance(); // consume '.'
+                            let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
+                            let getter = AST::Get::new(name, expr);
+                            expr = Box::new(AST::Call::new(Box::new(AST::Variable::new(getter.name.clone())), Some(getter), paren, arguments));
+                            while !self.check_type(&TokenType::RIGHT_PAREN) {
+                                self.advance();
+                            }
+                            self.advance();
+                        } else {
+                            expr = Box::new(AST::Call::new(expr, None, paren, arguments));
+                        }
                     } else if self.check_type(&TokenType::DOT) {
                         self.advance(); // consume '.'
                         let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
@@ -538,6 +550,15 @@ impl Parser {
         // variable
         if self.check_type(&TokenType::IDENTIFIER) {
             return Ok(Box::new(AST::Variable::new(self.advance())));
+        }
+
+        // self
+        if self.check_type(&TokenType::SELF) {
+            if self.class_counter == 0 {
+                crate::error("SyntaxError", "'self' outside class declaration", self.previous().line);
+                return Err("'self' outside class declaration".into());
+            }
+            return Ok(Box::new(AST::Self_::new(self.advance())));
         }
 
         // braces

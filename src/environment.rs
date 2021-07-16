@@ -43,8 +43,7 @@ impl Environment {
 
     pub fn get(&self, identifier: Token) -> Result<Type, Error> {
         let name = &identifier.lexeme;
-        let value = self.symbol_table.get(name);
-        match value {
+        match self.symbol_table.get(name) {
             Some(x) => Ok(x.clone()),
             None => {
                 match &self.enclosing {
@@ -55,6 +54,12 @@ impl Environment {
                     }
                 }
             }
+        }
+    }
+
+    pub fn rename(&mut self, old: String, new: String) {
+        if let Some(value) = self.symbol_table.remove(&old) {
+            self.symbol_table.insert(new, value);
         }
     }
 }

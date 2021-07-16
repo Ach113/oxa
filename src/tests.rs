@@ -76,4 +76,25 @@ mod tests {
         assert!(crate::run("fun foo() { fun bar() { return 13; } return bar(); } bar()".to_string(), env.clone()).is_err()); // undefined function
         Ok(())
     }
+
+    #[test]
+    fn class_test() -> Result<(), String> {
+        let env = Rc::new(RefCell::new(Environment::new(None)));
+        assert_eq!(Type::NUMERIC(6.0), crate::run("class Foo {
+            fun init(self, a, b, c) {
+              self.a = a;
+              self.b = b;
+              self.c = c;
+            }
+                  
+            fun sum(self) {
+              return self.a + self.b + self.c;
+            }
+         }
+                  
+        var foo = Foo();
+        foo.init(1, 2, 3);
+        foo.sum()".to_string(), env.clone())?);
+        Ok(())
+    }
 }

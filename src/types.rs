@@ -16,6 +16,7 @@ pub enum Type {
     NUMERIC(f64),
     BOOL(bool),
     FUN(Function),
+    METHOD(Function),
     CLASS(Class),
     OBJECT(Object),
     NIL,
@@ -28,6 +29,7 @@ impl fmt::Display for Type {
             Type::NUMERIC(x) => write!(f, "{}", x),
             Type::BOOL(x) => write!(f, "{}", x),
             Type::FUN(x) => write!(f, "<fun {}>", x.name),
+            Type::METHOD(x) => write!(f, "<method {}>", x.name),
             Type::CLASS(x) => write!(f, "<class {}>", x.name),
             Type::OBJECT(x) => write!(f, "<instance of {}>", x.class.name),
             Type::NIL => write!(f, ""),
@@ -174,6 +176,7 @@ impl Type {
             Type::STRING(_) => "string".to_string(),
             Type::BOOL(_) => "bool".to_string(),
             Type::FUN(_) => "function".to_string(),
+            Type::METHOD(_) => "method".to_string(),
             Type::CLASS(_) => "class".to_string(),
             Type::OBJECT(_) => "object".to_string(),
             Type::NIL => "nil".to_string(),
@@ -193,7 +196,7 @@ pub struct Function {
     address: u64, // line where function is declared
     pub name: String, // function identifier
     body: Rc<RefCell<BlockStmt>>, // executable body of function
-    args: Vec<String>, // name of accepted parameters
+    pub args: Vec<String>, // name of accepted parameters
 }
 
 impl Function {
@@ -221,6 +224,9 @@ impl Callable for Function {
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
         // insert function arguments into function scope
         for (identifier, value) in self.args.iter().zip(args.iter()) {
+            if identifier == &String::from("self") {
+                continue;
+            }
             let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
             enclosing.borrow_mut().add(t, value.clone());
         }
@@ -253,10 +259,13 @@ impl Class {
     }
 
     pub fn arity(&self) -> usize {
+        0
+        /*
         match self.methods.get("init") {
             Some(f) => f.arity,
             None => 0,
         }
+        */
     }
 }
 
@@ -280,7 +289,7 @@ impl Callable for Class {
         // class fields
         let mut fields: HashMap<String, Box<Type>> = HashMap::new();
         for (key, value) in &self.methods {
-            fields.insert(key.clone(), Box::new(Type::FUN(value.clone())));
+            fields.insert(key.clone(), Box::new(Type::METHOD(value.clone())));
         }
         Ok(Type::OBJECT(Object::new(self.clone(), fields)))
     }
@@ -308,13 +317,8 @@ impl Object {
     }
 
     pub fn set(&mut self, name: &Token, value: Type) -> Result<Type, Error> {
-        if self.fields.contains_key(&name.lexeme) {
-            self.fields.insert(name.lexeme.clone(), Box::new(value));
-            Ok(Type::NIL)
-        } else {
-            crate::error("TypeError", &format!("{} has no attribute '{}'", self.class.name, name.lexeme), name.line);
-            Err(Error::STRING(format!("{} has no attribute '{}'", self.class.name, name)))
-        }
+        self.fields.insert(name.lexeme.clone(), Box::new(value.clone()));
+        Ok(Type::OBJECT(self.clone()))
     }
 }
 
@@ -325,3 +329,54 @@ impl fmt::Debug for Object {
            .finish()
     }
 }
+
+/* METHOD
+#[derive(Clone)]
+pub struct Method {
+    arity: usize, // number of arguments function takes
+    address: u64, // line where function is declared
+    pub name: String, // function identifier
+    body: Rc<RefCell<BlockStmt>>, // executable body of function
+    args: Vec<String>, // name of accepted parameters
+}
+
+impl Method {
+    pub fn new(name: String, address: u64, body: Rc<RefCell<BlockStmt>>, args: Vec<String>) -> Self {
+        Method {arity: args.len(), name, address, body, args}
+    }
+}
+
+impl fmt::Debug for Method {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Method")
+           .field("identifier", &self.name)
+           .field("address", &self.address)
+           .finish()
+    }
+}
+
+impl Callable for Method {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+        if args.len() != self.arity {
+            crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
+            return Err(Error::STRING("function arity error".into()));
+        }
+        // new scope for the function
+        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
+        // insert function arguments into function scope
+        for (identifier, value) in self.args.iter().zip(args.iter()) {
+            let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
+            enclosing.borrow_mut().add(t, value.clone());
+        }
+        match interpret(&(self.body.borrow().statements), enclosing) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                match e {
+                    Error::RETURN(x) => Ok(x),
+                    _ => Err(e),
+                }
+            }
+        }
+    }
+}
+*/
