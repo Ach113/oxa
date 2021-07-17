@@ -187,7 +187,7 @@ impl Type {
 /*** FUNCTION ***/
 
 pub trait Callable {
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
+    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
 }
 
 #[derive(Clone)]
@@ -215,7 +215,7 @@ impl fmt::Debug for Function {
 }
 
 impl Callable for Function {
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         if args.len() != self.arity {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
             return Err(Error::STRING("function arity error".into()));
@@ -224,12 +224,33 @@ impl Callable for Function {
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
         // insert function arguments into function scope
         for (identifier, value) in self.args.iter().zip(args.iter()) {
-            if identifier == &String::from("self") {
-                continue;
-            }
             let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
             enclosing.borrow_mut().add(t, value.clone());
         }
+        // interpret the function
+        let mut res = Type::NIL;
+        for stmt in &(self.body.borrow().statements) {
+            match stmt.eval(enclosing.clone()) {
+                Err(e) => {
+                    match e {
+                        Error::BREAK | Error::CONTINUE => return Err(e),
+                        Error::RETURN(x) => return Ok(x),
+                        _ => return Err(e),
+                    }
+                },
+                Ok(x) => res = x,
+            }
+        }
+        if let Some(s) = self_ {
+            let t = Token::new(String::from("self"), Type::NIL, TokenType::IDENTIFIER, self.address);
+            if let Type::OBJECT(obj) = enclosing.borrow_mut().get(t)? {
+                for (field, value) in obj.fields.iter() {
+                    s.borrow_mut().set(field.to_string(), *(value.clone()));
+                }
+            }
+        }
+        return Ok(res);
+        /*
         match interpret(&(self.body.borrow().statements), enclosing) {
             Ok(x) => Ok(x),
             Err(e) => {
@@ -239,6 +260,7 @@ impl Callable for Function {
                 }
             }
         }
+        */
     }
 }
 
@@ -279,7 +301,7 @@ impl fmt::Debug for Class {
 
 impl Callable for Class {
     // class constructor
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         if args.len() != self.arity() {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity(), args.len()), callee.line);
             return Err(Error::STRING("constructor arity error".into()));
@@ -298,7 +320,7 @@ impl Callable for Class {
 #[derive(Clone)]
 pub struct Object {
     class: Class,
-    fields: HashMap<String, Box<Type>>,
+    pub fields: HashMap<String, Box<Type>>,
 }
 
 impl Object {
@@ -316,8 +338,8 @@ impl Object {
         }
     }
 
-    pub fn set(&mut self, name: &Token, value: Type) -> Result<Type, Error> {
-        self.fields.insert(name.lexeme.clone(), Box::new(value.clone()));
+    pub fn set(&mut self, name: String, value: Type) -> Result<Type, Error> {
+        self.fields.insert(name, Box::new(value.clone()));
         Ok(Type::OBJECT(self.clone()))
     }
 }

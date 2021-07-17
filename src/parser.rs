@@ -548,10 +548,10 @@ impl Parser {
             return Ok(Box::new(AST::Literal::new(self.advance()).unwrap()));
         }
         // variable
-        if self.check_type(&TokenType::IDENTIFIER) {
+        if self.check_type(&TokenType::IDENTIFIER) | self.check_type(&TokenType::SELF) {
             return Ok(Box::new(AST::Variable::new(self.advance())));
         }
-
+        /*
         // self
         if self.check_type(&TokenType::SELF) {
             if self.class_counter == 0 {
@@ -560,6 +560,7 @@ impl Parser {
             }
             return Ok(Box::new(AST::Self_::new(self.advance())));
         }
+        */
 
         // braces
         if self.check_type(&TokenType::LEFT_BRACE) {
