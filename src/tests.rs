@@ -95,6 +95,22 @@ mod tests {
         var foo = Foo();
         foo.init(1, 2, 3);
         foo.sum()".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(13.0), crate::run("class Foo {              
+            fun foo_method(self) {
+              class Bar {
+                fun bar_method(self, x) {
+                  self.x = x;
+                }
+              }
+              var b = Bar();
+              b.bar_method(13);
+              self.x = b.x;
+            }
+          }
+                            
+          var foo = Foo();
+          foo.foo_method();
+          foo.x".to_string(), env.clone())?);
         Ok(())
     }
 }

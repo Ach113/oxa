@@ -513,6 +513,7 @@ impl Parser {
                         }
                         let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
                         // method parsing
+                        // KINDA IFFY, NEEDS ATTENTION
                         if expr.get_type() == String::from("Getter") {
                             self.current = ret_index;
                             expr = self.primary()?;
@@ -523,7 +524,7 @@ impl Parser {
                             while !self.check_type(&TokenType::RIGHT_PAREN) {
                                 self.advance();
                             }
-                            self.advance();
+                            self.advance(); // consume ')'
                         } else {
                             expr = Box::new(AST::Call::new(expr, None, paren, arguments));
                         }
@@ -548,19 +549,17 @@ impl Parser {
             return Ok(Box::new(AST::Literal::new(self.advance()).unwrap()));
         }
         // variable
-        if self.check_type(&TokenType::IDENTIFIER) | self.check_type(&TokenType::SELF) {
+        if self.check_type(&TokenType::IDENTIFIER) {
             return Ok(Box::new(AST::Variable::new(self.advance())));
         }
-        /*
         // self
         if self.check_type(&TokenType::SELF) {
             if self.class_counter == 0 {
-                crate::error("SyntaxError", "'self' outside class declaration", self.previous().line);
+                crate::error("SyntaxError", "'self' outside class declaration", self.peek().line);
                 return Err("'self' outside class declaration".into());
             }
-            return Ok(Box::new(AST::Self_::new(self.advance())));
+            return Ok(Box::new(AST::Variable::new(self.advance())));
         }
-        */
 
         // braces
         if self.check_type(&TokenType::LEFT_BRACE) {
