@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::fmt;
+use std::collections::HashMap;
 
 use crate::types::{Type, Function, Callable, Class, Object};
 use crate::tokens::{Token, TokenType};
@@ -830,5 +831,56 @@ impl Eval for ClassDeclr {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         env.borrow_mut().add(self.name.clone(), Type::CLASS(self.class.clone()))?;
         Ok(Type::NIL)
+    }
+}
+
+// import statement
+pub struct Import {
+    module: Token
+}
+
+impl Import {
+    pub fn new(module: Token) -> Self {
+        Import {module}
+    }
+}
+
+impl Eval for Import {
+    fn get_type(&self) -> String {
+        String::from("Import")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+        let module_name = format!("{}.oxa", self.module.lexeme);
+        match std::fs::read_to_string(module_name.clone()) {
+            Ok(code) => {
+                // create class <module>
+                let methods: Vec<Function> = Vec::new();
+                let class = Class::new(String::from("__MODULE__"), methods);
+                let t = Token::new(String::from("__MODULE__"), Type::NIL, TokenType::NIL, self.module.line);
+                env.borrow_mut().add(t, Type::CLASS(class.clone()))?;
+                // create new environment for the module and execute module code
+                let module_env = Rc::new(RefCell::new(Environment::new(None)));
+                match crate::run(code, module_env.clone()) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Err(Error::STRING(e));
+                    }
+                }
+                // bring symbol table of module inside current scope
+                let mut fields: HashMap<String, Box<Type>> = HashMap::new();
+                for (identifier, value) in module_env.borrow().symbol_table.iter() {
+                    fields.insert(identifier.clone(), Box::new(value.clone()));
+                }
+                let object = Type::OBJECT(Object::new(class, fields));
+                let t = Token::new(self.module.lexeme.clone(), Type::NIL, TokenType::NIL, self.module.line);
+                env.borrow_mut().add(t, object);
+                Ok(Type::NIL)
+            },
+            Err(_) => {
+                crate::error("FileNotFound", &format!("file `{}` could not be found", module_name), self.module.line);
+                Err(Error::STRING("FileNotFound".into()))
+            }
+        }
     }
 }

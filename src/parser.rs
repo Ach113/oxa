@@ -93,6 +93,7 @@ impl Parser {
     fn declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         let keyword = self.peek().t;
         match keyword {
+            TokenType::IMPORT => self.import_statement(),
             TokenType::VAR => self.var_declaration(),
             TokenType::FUN => {
                 match self.function_declaration() {
@@ -103,6 +104,14 @@ impl Parser {
             TokenType::CLASS => self.class_declaration(),
             _ => self.statement()
         }
+    }
+
+    // "import" identifier ";"
+    fn import_statement(&mut self) -> Result<Box<dyn Eval>, String> {
+        self.advance(); // consume "import" token
+        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after 'import'")?;
+        self.consume(TokenType::SEMICOLON, "Expect ';' after statement")?;
+        Ok(Box::new(AST::Import::new(identifier)))
     }
 
     // "class" identifier "{" function* "}"
