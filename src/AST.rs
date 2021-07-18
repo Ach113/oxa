@@ -420,23 +420,23 @@ impl Eval for Call {
                             let res = m.call(Some(obj_ref.clone()), args, env.clone(), self.paren.clone());
                             // update the value of callee
                             let object_id = &getter.object.get_type()[10..];
-                            let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, 666);
+                            let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, self.paren.line);
                             env.borrow_mut().assign(object_id.clone(), Type::OBJECT(obj_ref.borrow().clone()));
                             return res;
                         }
                         return Err(Error::STRING("invalid callee".into()));
                     },
                     _ => {
-                        crate::error("TypeError", &format!("type '{}' is not a method", self.identifier.get_type()), self.paren.line);
+                        crate::error("TypeError", &format!("type '{}' is not a method", getter.object.get_type()), self.paren.line);
                         return Err(Error::STRING("not a method".into()));
                     }
                 }
             },
-            _ => {
+            None => {
                 match self.identifier.eval(env.clone())? {
                     Type::FUN(f) => return f.call(None, args, env.clone(), self.paren.clone()),
                     Type::CLASS(c) => return c.call(None, args, env.clone(), self.paren.clone()),
-                    //Type::METHOD(m) => return m.call(None, args, env.clone(), self.paren.clone()),
+                    Type::METHOD(m) => return m.call(None, args, env.clone(), self.paren.clone()),
                     _ => {
                         crate::error("TypeError", &format!("type '{}' is not callable", self.identifier.get_type()), self.paren.line);
                         return Err(Error::STRING("type not callable".into()));
@@ -510,7 +510,6 @@ impl Eval for Set {
                         let value = self.value.eval(env.clone())?;
                         env.borrow_mut().assign(self.object_id.clone(), x.set(self.name.lexeme.clone(), value.clone())?);
                         Ok(value)
-                        //x.set(self.name.lexeme.clone(), self.value.eval(env.clone())?)
                     },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);

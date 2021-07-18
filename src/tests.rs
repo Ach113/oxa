@@ -80,6 +80,7 @@ mod tests {
     #[test]
     fn class_test() -> Result<(), String> {
         let env = Rc::new(RefCell::new(Environment::new(None)));
+        // regular class with constructor
         assert_eq!(Type::NUMERIC(6.0), crate::run("class Foo {
             fun init(self, a, b, c) {
               self.a = a;
@@ -95,6 +96,7 @@ mod tests {
         var foo = Foo();
         foo.init(1, 2, 3);
         foo.sum()".to_string(), env.clone())?);
+        // nested classes
         assert_eq!(Type::NUMERIC(13.0), crate::run("class Foo {              
             fun foo_method(self) {
               class Bar {
@@ -111,6 +113,38 @@ mod tests {
           var foo = Foo();
           foo.foo_method();
           foo.x".to_string(), env.clone())?);
+        // returning object
+        assert_eq!(Type::NUMERIC(-1.0), crate::run("class Foo {
+            fun method(self) {
+              class Bar {
+                fun bar_method(self, x) {
+                  self.x = x;
+                }
+              }
+              var b = Bar();
+              b.bar_method(-1);
+              return b;
+            }
+          }
+          
+          var foo = Foo();
+          var bar = foo.method();bar.x".to_string(), env.clone())?);
+        // chained getters
+        assert_eq!(Type::NUMERIC(42.0), crate::run("class Foo {
+            fun method(self) {
+              class Bar {
+                fun bar_method(self, x) {
+                  self.x = x;
+                }
+              }
+              var b = Bar();
+              b.bar_method(42);
+              self.b = b;
+            }
+          }
+          
+          var foo = Foo();
+          foo.method();foo.b.x".to_string(), env.clone())?);
         Ok(())
     }
 }
