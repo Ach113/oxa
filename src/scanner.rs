@@ -203,7 +203,7 @@ impl Scanner {
                 }
             },
             '\n' => self.line += 1,
-            '\r' | ' ' => {},
+            '\r' | ' ' | '\t' => {},
             // default 
             _ => {
                 if c.is_digit(10) {
