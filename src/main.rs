@@ -44,10 +44,18 @@ fn error(error: &str, message: &str, line: u64) {
 
 // reads text from source file and runs it
 fn runfile(filename: &str) -> Result<(), String> {
-    let code = std::fs::read_to_string(filename).unwrap();
-    let env = Rc::new(RefCell::new(Environment::new(None)));
-    run(code, env);
-    Ok(())
+    match std::fs::read_to_string(filename) {
+        Ok(code) => {
+            let env = Rc::new(RefCell::new(Environment::new(None)));
+            run(code, env);
+            Ok(())
+        },
+        Err(_) => {
+            println!("FileNotFound: file `{}` could not be found", filename);
+            Err("FileNotFound".into())
+        }
+    }
+    
 }
 
 // Read a line of input, Evaluate it, Print the result, then Loop
