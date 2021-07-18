@@ -16,6 +16,7 @@ pub enum Type {
     NUMERIC(f64),
     BOOL(bool),
     FUN(Function),
+    METHOD(Function),
     CLASS(Class),
     OBJECT(Object),
     NIL,
@@ -28,6 +29,7 @@ impl fmt::Display for Type {
             Type::NUMERIC(x) => write!(f, "{}", x),
             Type::BOOL(x) => write!(f, "{}", x),
             Type::FUN(x) => write!(f, "<fun {}>", x.name),
+            Type::METHOD(x) => write!(f, "<method {}>", x.name),
             Type::CLASS(x) => write!(f, "<class {}>", x.name),
             Type::OBJECT(x) => write!(f, "<instance of {}>", x.class.name),
             Type::NIL => write!(f, ""),
@@ -174,6 +176,7 @@ impl Type {
             Type::STRING(_) => "string".to_string(),
             Type::BOOL(_) => "bool".to_string(),
             Type::FUN(_) => "function".to_string(),
+            Type::METHOD(_) => "method".to_string(),
             Type::CLASS(_) => "class".to_string(),
             Type::OBJECT(_) => "object".to_string(),
             Type::NIL => "nil".to_string(),
@@ -184,7 +187,7 @@ impl Type {
 /*** FUNCTION ***/
 
 pub trait Callable {
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
+    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
 }
 
 #[derive(Clone)]
@@ -193,7 +196,7 @@ pub struct Function {
     address: u64, // line where function is declared
     pub name: String, // function identifier
     body: Rc<RefCell<BlockStmt>>, // executable body of function
-    args: Vec<String>, // name of accepted parameters
+    pub args: Vec<String>, // name of accepted parameters
 }
 
 impl Function {
@@ -212,6 +215,169 @@ impl fmt::Debug for Function {
 }
 
 impl Callable for Function {
+    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+        if args.len() != self.arity {
+            crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
+            return Err(Error::STRING("function arity error".into()));
+        }
+        // new scope for the function
+        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
+        // insert function arguments into function scope
+        for (identifier, value) in self.args.iter().zip(args.iter()) {
+            let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
+            enclosing.borrow_mut().add(t, value.clone());
+        }
+        // interpret the function
+        let mut res = Type::NIL;
+        for stmt in &(self.body.borrow().statements) {
+            match stmt.eval(enclosing.clone()) {
+                Err(e) => {
+                    match e {
+                        Error::BREAK | Error::CONTINUE => return Err(e),
+                        Error::RETURN(x) => return Ok(x),
+                        _ => return Err(e),
+                    }
+                },
+                Ok(x) => res = x,
+            }
+        }
+        if let Some(s) = self_ {
+            let t = Token::new(String::from("self"), Type::NIL, TokenType::IDENTIFIER, self.address);
+            if let Type::OBJECT(obj) = enclosing.borrow_mut().get(t)? {
+                for (field, value) in obj.fields.iter() {
+                    s.borrow_mut().set(field.to_string(), *(value.clone()));
+                }
+            }
+        }
+        return Ok(res);
+        /*
+        match interpret(&(self.body.borrow().statements), enclosing) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                match e {
+                    Error::RETURN(x) => Ok(x),
+                    _ => Err(e),
+                }
+            }
+        }
+        */
+    }
+}
+
+/*** CLASS ***/
+#[derive(Clone)]
+pub struct Class {
+    pub name: String,
+    pub methods: HashMap<String, Function>,
+}
+
+impl Class {
+    pub fn new(name: String, methods: Vec<Function>) -> Self {
+        let mut map: HashMap<String, Function> = HashMap::new();
+        for method in methods {
+            map.insert(method.name.clone(), method);
+        }
+        Class {name, methods: map}
+    }
+
+    pub fn arity(&self) -> usize {
+        0
+        /*
+        match self.methods.get("init") {
+            Some(f) => f.arity,
+            None => 0,
+        }
+        */
+    }
+}
+
+impl fmt::Debug for Class {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Class")
+           .field("name", &self.name)
+           .finish()
+    }
+}
+
+impl Callable for Class {
+    // class constructor
+    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+        if args.len() != self.arity() {
+            crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity(), args.len()), callee.line);
+            return Err(Error::STRING("constructor arity error".into()));
+        }
+        // new scope for the function
+        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
+        // class fields
+        let mut fields: HashMap<String, Box<Type>> = HashMap::new();
+        for (key, value) in &self.methods {
+            fields.insert(key.clone(), Box::new(Type::METHOD(value.clone())));
+        }
+        Ok(Type::OBJECT(Object::new(self.clone(), fields)))
+    }
+}
+
+#[derive(Clone)]
+pub struct Object {
+    class: Class,
+    pub fields: HashMap<String, Box<Type>>,
+}
+
+impl Object {
+    pub fn new(class: Class, fields: HashMap<String, Box<Type>>) -> Self {
+        Object {class, fields}
+    }
+
+    pub fn get(&self, name: &Token) -> Result<Type, Error> {
+        match self.fields.get(&name.lexeme) {
+            Some(x) => Ok((**x).clone()),
+            None => {
+                crate::error("TypeError", &format!("{} has no attribute '{}'", self.class.name, name.lexeme), name.line);
+                Err(Error::STRING(format!("{} has no attribute '{}'", self.class.name, name)))
+            }
+        }
+    }
+
+    pub fn set(&mut self, name: String, value: Type) -> Result<Type, Error> {
+        self.fields.insert(name, Box::new(value.clone()));
+        Ok(Type::OBJECT(self.clone()))
+    }
+}
+
+impl fmt::Debug for Object {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Object")
+           .field("class", &self.class.name)
+           .finish()
+    }
+}
+
+/* METHOD
+#[derive(Clone)]
+pub struct Method {
+    arity: usize, // number of arguments function takes
+    address: u64, // line where function is declared
+    pub name: String, // function identifier
+    body: Rc<RefCell<BlockStmt>>, // executable body of function
+    args: Vec<String>, // name of accepted parameters
+}
+
+impl Method {
+    pub fn new(name: String, address: u64, body: Rc<RefCell<BlockStmt>>, args: Vec<String>) -> Self {
+        Method {arity: args.len(), name, address, body, args}
+    }
+}
+
+impl fmt::Debug for Method {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Method")
+           .field("identifier", &self.name)
+           .field("address", &self.address)
+           .finish()
+    }
+}
+
+impl Callable for Method {
     fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         if args.len() != self.arity {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
@@ -235,93 +401,4 @@ impl Callable for Function {
         }
     }
 }
-
-/*** CLASS ***/
-#[derive(Clone)]
-pub struct Class {
-    pub name: String,
-    pub methods: HashMap<String, Function>,
-}
-
-impl Class {
-    pub fn new(name: String, methods: Vec<Function>) -> Self {
-        let mut map: HashMap<String, Function> = HashMap::new();
-        for method in methods {
-            map.insert(method.name.clone(), method);
-        }
-        Class {name, methods: map}
-    }
-
-    pub fn arity(&self) -> usize {
-        match self.methods.get("init") {
-            Some(f) => f.arity,
-            None => 0,
-        }
-    }
-}
-
-impl fmt::Debug for Class {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_struct("Class")
-           .field("name", &self.name)
-           .finish()
-    }
-}
-
-impl Callable for Class {
-    // class constructor
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
-        if args.len() != self.arity() {
-            crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity(), args.len()), callee.line);
-            return Err(Error::STRING("constructor arity error".into()));
-        }
-        // new scope for the function
-        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
-        // class fields
-        let mut fields: HashMap<String, Box<Type>> = HashMap::new();
-        for (key, value) in &self.methods {
-            fields.insert(key.clone(), Box::new(Type::FUN(value.clone())));
-        }
-        Ok(Type::OBJECT(Object::new(self.clone(), fields)))
-    }
-}
-
-#[derive(Clone)]
-pub struct Object {
-    class: Class,
-    fields: HashMap<String, Box<Type>>,
-}
-
-impl Object {
-    pub fn new(class: Class, fields: HashMap<String, Box<Type>>) -> Self {
-        Object {class, fields}
-    }
-
-    pub fn get(&self, name: &Token) -> Result<Type, Error> {
-        match self.fields.get(&name.lexeme) {
-            Some(x) => Ok((**x).clone()),
-            None => {
-                crate::error("TypeError", &format!("{} has no attribute '{}'", self.class.name, name.lexeme), name.line);
-                Err(Error::STRING(format!("{} has no attribute '{}'", self.class.name, name)))
-            }
-        }
-    }
-
-    pub fn set(&mut self, name: &Token, value: Type) -> Result<Type, Error> {
-        if self.fields.contains_key(&name.lexeme) {
-            self.fields.insert(name.lexeme.clone(), Box::new(value));
-            Ok(Type::NIL)
-        } else {
-            crate::error("TypeError", &format!("{} has no attribute '{}'", self.class.name, name.lexeme), name.line);
-            Err(Error::STRING(format!("{} has no attribute '{}'", self.class.name, name)))
-        }
-    }
-}
-
-impl fmt::Debug for Object {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_struct("Object")
-           .field("class", &self.class.name)
-           .finish()
-    }
-}
+*/

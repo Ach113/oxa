@@ -23,7 +23,7 @@ pub fn interpret(statements: &Vec<Box<dyn Eval>>, env: Rc<RefCell<Environment>>)
         }
     }
     if error_count > 0 {
-        Err(Error::STRING("ParserError".into()))
+        Err(Error::STRING(format!("RuntimeError: {} errors", error_count)))
     } else {
         Ok(res)
     }

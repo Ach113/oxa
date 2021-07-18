@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::fmt;
 
-use crate::types::{Type, Function, Callable, Class};
+use crate::types::{Type, Function, Callable, Class, Object};
 use crate::tokens::{Token, TokenType};
 use crate::environment::Environment;
 use crate::interpreter::interpret;
@@ -237,7 +237,7 @@ impl Eval for Grouping {
 
 impl Eval for Variable {
     fn get_type(&self) -> String {
-        String::from("Variable")
+        format!("Variable: {}", self.identifier.lexeme)
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
@@ -252,7 +252,7 @@ impl Eval for Assignment {
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         let value = self.value.eval(env.clone())?; 
-
+        println!("{}", self.identifier.clone());
         env.borrow_mut().assign(self.identifier.clone(), value.clone())
     }
 }
@@ -385,49 +385,71 @@ impl Eval for LogicalExpr {
 }
 
 // function call
-pub struct FunctionCall {
-    callee: Box<dyn Eval>,
+pub struct Call {
+    identifier: Box<dyn Eval>, // function identifier
+    callee: Option<Get>, // callee object for method calls
     paren: Token,
     arguments: Vec<Box<dyn Eval>>
 }
 
-impl FunctionCall {
-    pub fn new(callee: Box<dyn Eval>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
-        FunctionCall {callee, paren, arguments}
+impl Call {
+    pub fn new(identifier: Box<dyn Eval>, callee: Option<Get>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
+        Call {identifier, callee, paren, arguments}
     }
 }
 
-impl Eval for FunctionCall {
+impl Eval for Call {
     fn get_type(&self) -> String {
-        String::from("FunctionCall")
+        String::from("Call")
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        let callable: Box<dyn Callable> = match self.callee.eval(env.clone()) {
-            Ok(obj) => {
-                match obj {
-                    Type::FUN(f) => Box::new(f),
-                    Type::CLASS(c) => Box::new(c),
-                    _ => {
-                        crate::error("TypeError", &format!("type '{}' is not callable", obj.get_type()), self.paren.line);
-                        return Err(Error::STRING("type not callable".into()));
-                    },
-                }
-            },
-            Err(e) => return Err(e),
-        };
+        // initialize the argument vector
         let mut args: Vec<Type> = Vec::new();
-        // evaluate the list of arguments
         for arg in &self.arguments {
            args.push(arg.eval(env.clone())?);
+        }       
+        // if callee is present, we have a method at hand
+        match &self.callee {
+            Some(getter) => {
+                match getter.eval(env.clone())? {
+                    Type::METHOD(m) => {
+                        if let Type::OBJECT(obj) = getter.object.eval(env.clone())? {
+                            args.insert(0, Type::OBJECT(obj.clone()));
+                            let obj_ref = Rc::new(RefCell::new(obj));
+                            let res = m.call(Some(obj_ref.clone()), args, env.clone(), self.paren.clone());
+                            // update the value of callee
+                            let object_id = &getter.object.get_type()[10..];
+                            let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, 666);
+                            env.borrow_mut().assign(object_id.clone(), Type::OBJECT(obj_ref.borrow().clone()));
+                            return res;
+                        }
+                        return Err(Error::STRING("invalid callee".into()));
+                    },
+                    _ => {
+                        crate::error("TypeError", &format!("type '{}' is not a method", self.identifier.get_type()), self.paren.line);
+                        return Err(Error::STRING("not a method".into()));
+                    }
+                }
+            },
+            _ => {
+                match self.identifier.eval(env.clone())? {
+                    Type::FUN(f) => return f.call(None, args, env.clone(), self.paren.clone()),
+                    Type::CLASS(c) => return c.call(None, args, env.clone(), self.paren.clone()),
+                    //Type::METHOD(m) => return m.call(None, args, env.clone(), self.paren.clone()),
+                    _ => {
+                        crate::error("TypeError", &format!("type '{}' is not callable", self.identifier.get_type()), self.paren.line);
+                        return Err(Error::STRING("type not callable".into()));
+                    },
+                } 
+            },
         }
-        (*callable).call(args, env.clone(), self.paren.clone())
     }
 }
 
 // class property access
 pub struct Get {
-    name: Token,
+    pub name: Token,
     object: Box<dyn Eval>,
 }
 
@@ -442,11 +464,54 @@ impl Eval for Get {
         String::from("Getter")
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> { 
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+        // "get" the field
         match self.object.eval(env.clone()) {
             Ok(obj) => {
                 match obj {
                     Type::OBJECT(x) => x.get(&self.name),
+                    _ => {
+                        crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
+                        Err(Error::STRING("type has no attributes".into()))
+                    },
+                }
+            },
+            Err(e) => Err(e),
+        }
+    }
+}
+
+// class property modifier
+pub struct Set {
+    name: Token,
+    object_id: Token,
+    object: Box<dyn Eval>,
+    value: Box<dyn Eval>,
+}
+
+impl Set {
+    pub fn new(name: Token, object: Box<dyn Eval>, value: Box<dyn Eval>) -> Self {
+        let object_id = &object.get_type()[10..];
+        let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, 666);
+        Set {name, object_id, object, value}
+    }
+}
+
+impl Eval for Set {
+    fn get_type(&self) -> String {
+        String::from("Setter")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+        match self.object.eval(env.clone()) {
+            Ok(mut obj) => {
+                match obj {
+                    Type::OBJECT(mut x) => {
+                        let value = self.value.eval(env.clone())?;
+                        env.borrow_mut().assign(self.object_id.clone(), x.set(self.name.lexeme.clone(), value.clone())?);
+                        Ok(value)
+                        //x.set(self.name.lexeme.clone(), self.value.eval(env.clone())?)
+                    },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
                         return Err(Error::STRING("type has no attributes".into()));
@@ -458,36 +523,26 @@ impl Eval for Get {
     }
 }
 
-// class property modifier
-pub struct Set {
-    name: Token,
-    object: Box<dyn Eval>,
-    value: Box<dyn Eval>,
+/* self */
+pub struct Self_ {
+    identifier: Token
 }
 
-impl Set {
-    pub fn new(name: Token, object: Box<dyn Eval>, value: Box<dyn Eval>) -> Self {
-        Set {name, object, value}
+impl Self_ {
+    pub fn new(identifier: Token) -> Self {
+        Self_{identifier}
     }
 }
 
-impl Eval for Set {
+impl Eval for Self_ {
     fn get_type(&self) -> String {
-        String::from("Setter")
+        format!("Variable: {}", self.identifier.lexeme)
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> { 
-        match self.object.eval(env.clone()) {
-            Ok(obj) => {
-                match obj {
-                    Type::OBJECT(mut x) => x.set(&self.name, self.value.eval(env.clone())?),
-                    _ => {
-                        crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
-                        return Err(Error::STRING("type has no attributes".into()));
-                    },
-                }
-            },
-            Err(e) => return Err(e),
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+        match &env.borrow().enclosing {
+            Some(env) => env.borrow().get(self.identifier.clone()),
+            None => Err(Error::STRING("'self' outside of class body".to_string())),
         }
     }
 }
@@ -731,7 +786,11 @@ impl Eval for FunDeclaration {
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         // add function declaration to the symbol table
-        env.borrow_mut().add(self.identifier.clone(), Type::FUN(self.f.clone()))?;
+        if self.f.args.len() == 0 || self.f.args[0] != String::from("self") {
+            env.borrow_mut().add(self.identifier.clone(), Type::FUN(self.f.clone()))?;
+        } else {
+            env.borrow_mut().add(self.identifier.clone(), Type::METHOD(self.f.clone()))?;
+        }
         Ok(Type::NIL)
     }
 }
