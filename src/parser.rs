@@ -50,7 +50,6 @@ impl Parser {
 
     // returns current token, increments index
     fn advance(&mut self) -> Token {
-        //println!("{}", self.peek());
         if !self.at_end() {
             self.current += 1;
         }
@@ -121,7 +120,7 @@ impl Parser {
 
     // "fun" identifier "(" args[] ")" block_stmt
     fn function_declaration(&mut self) -> Result<AST::FunDeclaration, String> {
-        self.advance(); // consume "fun" token
+        self.consume(TokenType::FUN, "Expect 'fun' before function declaration")?;
         self.function_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after function declaration")?;
         self.consume(TokenType::LEFT_PAREN, "Expect '(' after function declaration")?;
@@ -491,7 +490,8 @@ impl Parser {
 
     // grammar supports curried functions
     fn function_call(&mut self) -> Result<Box<dyn Eval>, String> {
-        let ret_index = self.current;
+        let mut ret_index = self.current;
+        let mut identifier: String = String::from("");
         match self.primary() {
             Ok(mut expr) => {
                 loop {
@@ -516,9 +516,9 @@ impl Parser {
                         // KINDA IFFY, NEEDS ATTENTION
                         if expr.get_type() == String::from("Getter") {
                             self.current = ret_index;
-                            expr = self.primary()?;
+                            expr = self.primary()?; // WHY PRIMARY
                             self.advance(); // consume '.'
-                            let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
+                            let name = self.consume(TokenType::IDENTIFIER, "1 Expect identifier after '.'")?;
                             let getter = AST::Get::new(name, expr);
                             expr = Box::new(AST::Call::new(Box::new(AST::Variable::new(getter.name.clone())), Some(getter), paren, arguments));
                             while !self.check_type(&TokenType::RIGHT_PAREN) {
@@ -528,9 +528,11 @@ impl Parser {
                         } else {
                             expr = Box::new(AST::Call::new(expr, None, paren, arguments));
                         }
-                    } else if self.check_type(&TokenType::DOT) {
+                    } 
+                    if self.check_type(&TokenType::DOT) {
                         self.advance(); // consume '.'
                         let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
+                        identifier = name.lexeme.clone();
                         expr = Box::new(AST::Get::new(name, expr));
                     } else {
                         break;
