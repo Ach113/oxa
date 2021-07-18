@@ -3,6 +3,9 @@ use crate::AST;
 use crate::AST::Eval;
 use crate::types::{Type, Function};
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 // operators supported by each type of expression
 const EQUALITIES: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
 const COMPARISONS: [TokenType; 4] = [TokenType::GREATER, TokenType::GREATER_EQUAL, TokenType::LESS, TokenType::LESS_EQUAL];
@@ -490,8 +493,6 @@ impl Parser {
 
     // grammar supports curried functions
     fn function_call(&mut self) -> Result<Box<dyn Eval>, String> {
-        let mut ret_index = self.current;
-        let mut identifier: String = String::from("");
         match self.primary() {
             Ok(mut expr) => {
                 loop {
@@ -512,30 +513,13 @@ impl Parser {
                             }
                         }
                         let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
-                        // method parsing
-                        // KINDA IFFY, NEEDS ATTENTION
-                        if expr.get_type() == String::from("Getter") {
-                            self.current = ret_index;
-                            expr = self.primary()?; // WHY PRIMARY
-                            self.advance(); // consume '.'
-                            let name = self.consume(TokenType::IDENTIFIER, "1 Expect identifier after '.'")?;
-                            let getter = AST::Get::new(name, expr);
-                            expr = Box::new(AST::Call::new(Box::new(AST::Variable::new(getter.name.clone())), Some(getter), paren, arguments));
-                            while !self.check_type(&TokenType::RIGHT_PAREN) {
-                                self.advance();
-                            }
-                            self.advance(); // consume ')'
-                        } else {
-                            expr = Box::new(AST::Call::new(expr, None, paren, arguments));
-                        }
-                    } 
-                    if self.check_type(&TokenType::DOT) {
+                        expr = Box::new(AST::Call::new(expr, paren, arguments));
+                    } else if self.check_type(&TokenType::DOT) {
                         self.advance(); // consume '.'
                         let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
-                        identifier = name.lexeme.clone();
                         expr = Box::new(AST::Get::new(name, expr));
                     } else {
-                        break;
+                        return Ok(expr);
                     }
                 }
                 Ok(expr)

@@ -187,11 +187,13 @@ impl Type {
 /*** FUNCTION ***/
 
 pub trait Callable {
-    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
 }
 
 #[derive(Clone)]
 pub struct Function {
+    pub self_: Option<Object>,
+    self_id: Option<String>,
     arity: usize, // number of arguments function takes
     address: u64, // line where function is declared
     pub name: String, // function identifier
@@ -201,7 +203,12 @@ pub struct Function {
 
 impl Function {
     pub fn new(name: String, address: u64, body: Rc<RefCell<BlockStmt>>, args: Vec<String>) -> Self {
-        Function {arity: args.len(), name, address, body, args}
+        Function {self_: None, self_id: None, arity: args.len(), name, address, body, args}
+    }
+
+    pub fn bind_self(&mut self, obj: Object, obj_id: Option<String>) {
+        self.self_ = Some(obj);
+        self.self_id = obj_id;
     }
 }
 
@@ -215,7 +222,8 @@ impl fmt::Debug for Function {
 }
 
 impl Callable for Function {
-    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+
         if args.len() != self.arity {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
             return Err(Error::STRING("function arity error".into()));
@@ -227,31 +235,8 @@ impl Callable for Function {
             let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
             enclosing.borrow_mut().add(t, value.clone());
         }
-        // interpret the function
-        let mut res = Type::NIL;
-        for stmt in &(self.body.borrow().statements) {
-            match stmt.eval(enclosing.clone()) {
-                Err(e) => {
-                    match e {
-                        Error::BREAK | Error::CONTINUE => return Err(e),
-                        Error::RETURN(x) => return Ok(x),
-                        _ => return Err(e),
-                    }
-                },
-                Ok(x) => res = x,
-            }
-        }
-        if let Some(s) = self_ {
-            let t = Token::new(String::from("self"), Type::NIL, TokenType::IDENTIFIER, self.address);
-            if let Type::OBJECT(obj) = enclosing.borrow_mut().get(t)? {
-                for (field, value) in obj.fields.iter() {
-                    s.borrow_mut().set(field.to_string(), *(value.clone()));
-                }
-            }
-        }
-        return Ok(res);
-        /*
-        match interpret(&(self.body.borrow().statements), enclosing) {
+        
+        let res = match interpret(&(self.body.borrow().statements), enclosing.clone()) {
             Ok(x) => Ok(x),
             Err(e) => {
                 match e {
@@ -259,8 +244,14 @@ impl Callable for Function {
                     _ => Err(e),
                 }
             }
+        };
+        if let Some(id) = &self.self_id {
+            let t = Token::new(self.args[0].clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
+            let value = enclosing.borrow().get(t)?;
+            let id = Token::new(id.to_string(), Type::NIL, TokenType::IDENTIFIER, self.address);
+            enclosing.borrow_mut().enclosing.as_ref().unwrap().borrow_mut().assign(id, value);
         }
-        */
+        res
     }
 }
 
@@ -301,7 +292,7 @@ impl fmt::Debug for Class {
 
 impl Callable for Class {
     // class constructor
-    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         if args.len() != self.arity() {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity(), args.len()), callee.line);
             return Err(Error::STRING("constructor arity error".into()));
@@ -351,54 +342,3 @@ impl fmt::Debug for Object {
            .finish()
     }
 }
-
-/* METHOD
-#[derive(Clone)]
-pub struct Method {
-    arity: usize, // number of arguments function takes
-    address: u64, // line where function is declared
-    pub name: String, // function identifier
-    body: Rc<RefCell<BlockStmt>>, // executable body of function
-    args: Vec<String>, // name of accepted parameters
-}
-
-impl Method {
-    pub fn new(name: String, address: u64, body: Rc<RefCell<BlockStmt>>, args: Vec<String>) -> Self {
-        Method {arity: args.len(), name, address, body, args}
-    }
-}
-
-impl fmt::Debug for Method {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_struct("Method")
-           .field("identifier", &self.name)
-           .field("address", &self.address)
-           .finish()
-    }
-}
-
-impl Callable for Method {
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
-        if args.len() != self.arity {
-            crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
-            return Err(Error::STRING("function arity error".into()));
-        }
-        // new scope for the function
-        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
-        // insert function arguments into function scope
-        for (identifier, value) in self.args.iter().zip(args.iter()) {
-            let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
-            enclosing.borrow_mut().add(t, value.clone());
-        }
-        match interpret(&(self.body.borrow().statements), enclosing) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                match e {
-                    Error::RETURN(x) => Ok(x),
-                    _ => Err(e),
-                }
-            }
-        }
-    }
-}
-*/

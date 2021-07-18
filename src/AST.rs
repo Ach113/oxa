@@ -387,14 +387,13 @@ impl Eval for LogicalExpr {
 // function call
 pub struct Call {
     identifier: Box<dyn Eval>, // function identifier
-    callee: Option<Get>, // callee object for method calls
     paren: Token,
     arguments: Vec<Box<dyn Eval>>
 }
 
 impl Call {
-    pub fn new(identifier: Box<dyn Eval>, callee: Option<Get>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
-        Call {identifier, callee, paren, arguments}
+    pub fn new(identifier: Box<dyn Eval>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
+        Call {identifier, paren, arguments}
     }
 }
 
@@ -404,53 +403,38 @@ impl Eval for Call {
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        // initialize the argument vector
         let mut args: Vec<Type> = Vec::new();
+        // evaluate the list of arguments
         for arg in &self.arguments {
            args.push(arg.eval(env.clone())?);
-        }       
-        // if callee is present, we have a method at hand
-        match &self.callee {
-            Some(getter) => {
-                match getter.eval(env.clone())? {
+        }
+        let callable: Box<dyn Callable> = match self.identifier.eval(env.clone()) {
+            Ok(obj) => {
+                match obj {
+                    Type::FUN(f) => Box::new(f),
+                    Type::CLASS(c) => Box::new(c),
                     Type::METHOD(m) => {
-                        if let Type::OBJECT(obj) = getter.object.eval(env.clone())? {
+                        if let Some(obj) = &m.self_ {
                             args.insert(0, Type::OBJECT(obj.clone()));
-                            let obj_ref = Rc::new(RefCell::new(obj));
-                            let res = m.call(Some(obj_ref.clone()), args, env.clone(), self.paren.clone());
-                            // update the value of callee
-                            let object_id = &getter.object.get_type()[10..];
-                            let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, self.paren.line);
-                            env.borrow_mut().assign(object_id.clone(), Type::OBJECT(obj_ref.borrow().clone()));
-                            return res;
                         }
-                        return Err(Error::STRING("invalid callee".into()));
+                        Box::new(m)
                     },
                     _ => {
-                        crate::error("TypeError", &format!("type '{}' is not a method", getter.object.get_type()), self.paren.line);
-                        return Err(Error::STRING("not a method".into()));
-                    }
-                }
-            },
-            None => {
-                match self.identifier.eval(env.clone())? {
-                    Type::FUN(f) => return f.call(None, args, env.clone(), self.paren.clone()),
-                    Type::CLASS(c) => return c.call(None, args, env.clone(), self.paren.clone()),
-                    Type::METHOD(m) => return m.call(None, args, env.clone(), self.paren.clone()),
-                    _ => {
-                        crate::error("TypeError", &format!("type '{}' is not callable", self.identifier.get_type()), self.paren.line);
+                        crate::error("TypeError", &format!("type '{}' is not callable", obj.get_type()), self.paren.line);
                         return Err(Error::STRING("type not callable".into()));
                     },
-                } 
+                }
             },
-        }
+            Err(e) => return Err(e),
+        };
+        (*callable).call(args, env.clone(), self.paren.clone())
     }
 }
 
 // class property access
 pub struct Get {
     pub name: Token,
-    object: Box<dyn Eval>,
+    object: Box<dyn Eval>, 
 }
 
 impl Get {
@@ -469,7 +453,21 @@ impl Eval for Get {
         match self.object.eval(env.clone()) {
             Ok(obj) => {
                 match obj {
-                    Type::OBJECT(x) => x.get(&self.name),
+                    Type::OBJECT(x) => {
+                        match x.get(&self.name)? {
+                            // bind "self" to the method
+                            // if self.object evaluates to variable, it can be modified, otherwise its read only (all changes get discarded)
+                            Type::METHOD(mut f) => {
+                                if self.object.get_type().contains("Variable") {
+                                    f.bind_self(x, Some(self.object.get_type()[10..].to_string()));
+                                } else {
+                                    f.bind_self(x, None);
+                                }
+                                Ok(Type::METHOD(f))
+                            },
+                            _ => x.get(&self.name),
+                        }
+                    },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
                         Err(Error::STRING("type has no attributes".into()))
@@ -492,7 +490,7 @@ pub struct Set {
 impl Set {
     pub fn new(name: Token, object: Box<dyn Eval>, value: Box<dyn Eval>) -> Self {
         let object_id = &object.get_type()[10..];
-        let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, 666);
+        let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, name.line);
         Set {name, object_id, object, value}
     }
 }
@@ -704,7 +702,7 @@ impl Eval for WhileLoop {
 
         while self.condition.eval(env.clone())? == Type::BOOL(true) {
             for stmt in &self.body.statements {
-                let ret = stmt.eval(enclosing.clone());
+                ret = stmt.eval(enclosing.clone());
                 match ret {
                     Ok(_) => {},
                     Err(e) => {
@@ -785,11 +783,7 @@ impl Eval for FunDeclaration {
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         // add function declaration to the symbol table
-        if self.f.args.len() == 0 || self.f.args[0] != String::from("self") {
-            env.borrow_mut().add(self.identifier.clone(), Type::FUN(self.f.clone()))?;
-        } else {
-            env.borrow_mut().add(self.identifier.clone(), Type::METHOD(self.f.clone()))?;
-        }
+        env.borrow_mut().add(self.identifier.clone(), Type::FUN(self.f.clone()))?;
         Ok(Type::NIL)
     }
 }
