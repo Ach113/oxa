@@ -4,8 +4,15 @@ use std::rc::Rc;
 use std::fmt;
 
 use crate::tokens::Token;
-use crate::types::Type;
+use crate::types::{Type, NativeFunction};
 use crate::AST::Error;
+
+fn add_natives(mut env: &mut Environment) {
+    env.symbol_table.insert("input".to_string(), Type::NATIVE(NativeFunction::INPUT));
+    env.symbol_table.insert("read".to_string(), Type::NATIVE(NativeFunction::READ));
+    env.symbol_table.insert("write".to_string(), Type::NATIVE(NativeFunction::WRITE));
+    env.symbol_table.insert("time".to_string(), Type::NATIVE(NativeFunction::TIME));
+}
 
 #[derive(Debug)]
 pub struct Environment {
@@ -16,6 +23,11 @@ pub struct Environment {
 impl Environment {
     pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
         let symbol_table: HashMap<String, Type> = HashMap::new();
+        if enclosing.is_none() {
+            let mut env = Environment {enclosing, symbol_table};
+            add_natives(&mut env);
+            return env;
+        }
         Environment {enclosing, symbol_table}
     }
 

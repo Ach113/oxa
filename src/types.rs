@@ -1,9 +1,11 @@
 use std::fmt;
+use std::time::{SystemTime, UNIX_EPOCH};
 use core::ops::{Add, Sub, Mul, Div, BitOr, BitAnd, BitXor, Rem};
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::prelude::*;
 
 use crate::AST::{BlockStmt, Error};
 use crate::interpreter::interpret;
@@ -19,6 +21,7 @@ pub enum Type {
     METHOD(Function),
     CLASS(Class),
     OBJECT(Object),
+    NATIVE(NativeFunction),
     NIL,
 }
 
@@ -29,6 +32,7 @@ impl fmt::Display for Type {
             Type::NUMERIC(x) => write!(f, "{}", x),
             Type::BOOL(x) => write!(f, "{}", x),
             Type::FUN(x) => write!(f, "<fun {}>", x.name),
+            Type::NATIVE(x) => write!(f, "<fun {:?}>", x),
             Type::METHOD(x) => write!(f, "<method {}>", x.name),
             Type::CLASS(x) => write!(f, "<class {}>", x.name),
             Type::OBJECT(x) => write!(f, "<instance of {}>", x.class.name),
@@ -176,6 +180,7 @@ impl Type {
             Type::STRING(_) => "string".to_string(),
             Type::BOOL(_) => "bool".to_string(),
             Type::FUN(_) => "function".to_string(),
+            Type::NATIVE(_) => "function".to_string(),
             Type::METHOD(_) => "method".to_string(),
             Type::CLASS(_) => "class".to_string(),
             Type::OBJECT(_) => "object".to_string(),
@@ -340,5 +345,81 @@ impl fmt::Debug for Object {
         fmt.debug_struct("Object")
            .field("class", &self.class.name)
            .finish()
+    }
+}
+
+// Native functions
+#[derive(Debug, Clone)]
+pub enum NativeFunction {
+    INPUT,
+    READ,
+    WRITE,
+    TIME,
+}
+
+impl Callable for NativeFunction {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+        match self {
+            NativeFunction::INPUT => {
+                if args.len() != 0 {
+                    crate::error("TypeError", &format!("read takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).expect("IOError: failed to read from stdin");
+                match input.trim().parse::<f64>() {
+                    Ok(x) => return Ok(Type::NUMERIC(x)),
+                    Err(_) => return Ok(Type::STRING(input.trim().to_string())),
+                }
+                Ok(Type::NIL)
+            },
+            NativeFunction::READ => {
+                if args.len() == 1 {
+                    if let Type::STRING(filename) = &args[0] {
+                        match std::fs::read_to_string(&filename) {
+                            Ok(s) => {
+                                return Ok(Type::STRING(s));
+                            },
+                            Err(_) => {
+                                crate::error("FileNotFound", &format!("file `{}` could not be found", filename), callee.line);
+                                return Err(Error::STRING("FileNotFound".into()));
+                            }
+                        }
+                    } else {
+                        crate::error("TypeError", &format!("invalid file handle {}", args[0].clone().get_type()), callee.line);
+                        return Err(Error::STRING("TypeError".into()));
+                    }
+                } else {
+                    crate::error("TypeError", &format!("read takes 1 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
+            NativeFunction::WRITE => {
+                if args.len() == 2 {
+                    match (args[0].clone(), args[1].clone()) {
+                        (Type::STRING(filename), Type::STRING(value)) => {
+                            let mut file = std::fs::File::create(&filename).expect(&format!("IOError: could not create {}", &filename));
+                        file.write_all(value.as_bytes()).expect(&format!("IOError: could not write to {}", &filename));
+                        return Ok(Type::NIL);
+                        },
+                        _ => {
+                            crate::error("TypeError", &format!("expected (String, String), got ({}, {})", args[0].clone().get_type(), args[1].clone().get_type()), callee.line);
+                            return Err(Error::STRING("TypeError".into()));
+                        },
+                    }
+                    
+                } else {
+                    crate::error("TypeError", &format!("write takes 2 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("TypeError".into()));
+                }
+            },
+            NativeFunction::TIME => {
+                if args.len() != 0 {
+                    crate::error("TypeError", &format!("read takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+                return Ok(Type::NUMERIC(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as f64));
+            }
+        }
     }
 }
