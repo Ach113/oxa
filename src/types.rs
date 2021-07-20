@@ -22,6 +22,7 @@ pub enum Type {
     CLASS(Class),
     OBJECT(Object),
     NATIVE(NativeFunction),
+    NATIVEC(NativeClass),
     NIL,
 }
 
@@ -36,6 +37,7 @@ impl fmt::Display for Type {
             Type::METHOD(x) => write!(f, "<method {}>", x.name),
             Type::CLASS(x) => write!(f, "<class {}>", x.name),
             Type::OBJECT(x) => write!(f, "<instance of {}>", x.class.name),
+            Type::NATIVEC(x) => write!(f, "<class {:?}>", x),
             Type::NIL => write!(f, ""),
         }
     }
@@ -183,6 +185,7 @@ impl Type {
             Type::NATIVE(_) => "function".to_string(),
             Type::METHOD(_) => "method".to_string(),
             Type::CLASS(_) => "class".to_string(),
+            Type::NATIVEC(_) => "class".to_string(),
             Type::OBJECT(_) => "object".to_string(),
             Type::NIL => "nil".to_string(),
         }
@@ -355,6 +358,11 @@ pub enum NativeFunction {
     READ,
     WRITE,
     TIME,
+    // native methods for <list>
+    INDEX(Rc<RefCell<Vec<Type>>>),
+    ADD(Rc<RefCell<Vec<Type>>>),
+    LEN(Rc<RefCell<Vec<Type>>>),
+    REMOVE(Rc<RefCell<Vec<Type>>>),
 }
 
 impl Callable for NativeFunction {
@@ -419,6 +427,91 @@ impl Callable for NativeFunction {
                     return Err(Error::STRING("function arity error".into()));
                 }
                 return Ok(Type::NUMERIC(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as f64));
+            },
+            // <list> methods
+            NativeFunction::INDEX(list) => {
+                if args.len() == 1 {
+                    match &args[0] {
+                        Type::NUMERIC(x) => {
+                            let index = *x as usize;
+                            if list.borrow().len() <= index {
+                                crate::error("IndexError", "list index out of range", callee.line);
+                                return Err(Error::STRING("IndexError".into()));
+                            }
+                            return Ok(list.borrow()[index].clone());
+                        },
+                        _ => {
+                            crate::error("TypeError", "invalid index type", callee.line);
+                            return Err(Error::STRING("TypeError".into()));
+                        }
+                    }
+                } else {
+                    crate::error("TypeError", &format!("`index` takes 1 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
+            NativeFunction::ADD(list) => {
+                if args.len() == 1 {
+                    list.borrow_mut().push(args[0].clone());
+                    return Ok(Type::NIL);
+                } else {
+                    crate::error("TypeError", &format!("`add` takes 1 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
+            NativeFunction::LEN(list) => {
+                if args.len() == 0 {
+                    return Ok(Type::NUMERIC(list.borrow_mut().len() as f64));
+                } else {
+                    crate::error("TypeError", &format!("`len` takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
+            NativeFunction::REMOVE(list) => {
+                if args.len() == 1 {
+                    match &args[0] {
+                        Type::NUMERIC(x) => {
+                            let index = *x as usize;
+                            if list.borrow().len() <= index {
+                                crate::error("IndexError", "list index out of range", callee.line);
+                                return Err(Error::STRING("IndexError".into()));
+                            }
+                            let ret = list.borrow_mut().remove(index);
+                            return Ok(ret);
+                        },
+                        _ => {
+                            crate::error("TypeError", "invalid index type", callee.line);
+                            return Err(Error::STRING("TypeError".into()));
+                        }
+                    }
+                } else {
+                    crate::error("TypeError", &format!("`index` takes 1 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum NativeClass {
+    LIST(Rc<RefCell<Vec<Type>>>),
+}
+
+impl Callable for NativeClass {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+        match self {
+            NativeClass::LIST(list) => {
+                for arg in args {
+                    list.borrow_mut().push(arg.clone());
+                }
+                let class = Class::new("list".to_string(), vec![].into());
+                let mut fields: HashMap<String, Box<Type>> = HashMap::new();
+                fields.insert("index".to_string(), Box::new(Type::NATIVE(NativeFunction::INDEX(list.clone()))));
+                fields.insert("add".to_string(), Box::new(Type::NATIVE(NativeFunction::ADD(list.clone()))));
+                fields.insert("len".to_string(), Box::new(Type::NATIVE(NativeFunction::LEN(list.clone()))));
+                fields.insert("remove".to_string(), Box::new(Type::NATIVE(NativeFunction::REMOVE(list.clone()))));
+                Ok(Type::OBJECT(Object::new(class, fields)))
             }
         }
     }

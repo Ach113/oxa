@@ -414,6 +414,7 @@ impl Eval for Call {
                 match obj {
                     Type::FUN(f) => Box::new(f),
                     Type::CLASS(c) => Box::new(c),
+                    Type::NATIVEC(c) => Box::new(c),
                     Type::NATIVE(f) => Box::new(f),
                     Type::METHOD(m) => {
                         if let Some(obj) = &m.self_ {
