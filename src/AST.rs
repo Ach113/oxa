@@ -911,3 +911,44 @@ impl Eval for Import {
         }
     }
 }
+
+pub struct Index {
+    iterable: Box<dyn Eval>,
+    index: Box<dyn Eval>,
+    operator: Token
+}
+
+impl Index {
+    pub fn new(iterable: Box<dyn Eval>, operator: Token, index: Box<dyn Eval>) -> Self {
+        Index {iterable, index, operator}
+    }
+}
+
+impl Eval for Index {
+    fn get_type(&self) -> String {
+        String::from("Index")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+       let argv: Vec<Type> = vec![self.index.eval(env.clone())?];
+       let t = Token::new("index".to_string(), Type::NIL, TokenType::NIL, self.operator.line);
+       let iterable = self.iterable.eval(env.clone())?;
+       match iterable {
+            Type::OBJECT(obj) => {
+                match obj.get(&t)? {
+                    Type::NATIVE(f) => {
+                        return f.call(argv, env.clone(), self.operator.clone());
+                    },
+                    _ => {
+                        crate::error("TypeError", "unexpected lhs for operator `[]`", self.operator.line);
+                        return Err(Error::STRING("TypeError".into()));
+                    }
+                }
+            },
+            _ => {
+                crate::error("TypeError", &format!("type `{}` cannot be indexed", iterable.get_type()), self.operator.line);
+                return Err(Error::STRING("TypeError".into()));
+            }
+        }
+    }
+}

@@ -12,8 +12,7 @@ fn add_natives(mut env: &mut Environment) {
     env.symbol_table.insert("read".to_string(), Type::NATIVE(NativeFunction::READ));
     env.symbol_table.insert("write".to_string(), Type::NATIVE(NativeFunction::WRITE));
     env.symbol_table.insert("time".to_string(), Type::NATIVE(NativeFunction::TIME));
-    let v: Vec<Type> = Vec::new();
-    env.symbol_table.insert("list".to_string(), Type::NATIVEC(NativeClass::LIST(Rc::new(RefCell::new(v)))));
+    env.symbol_table.insert("list".to_string(), Type::NATIVEC(NativeClass::LIST));
 }
 
 #[derive(Debug)]

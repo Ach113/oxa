@@ -503,12 +503,32 @@ impl Parser {
                 Err(right) => return Err(right),
             }
         }
-        match self.function_call() {
+        match self.brackets() {
             Err(e) => {
                 self.synchronize();
                 Err(e)
             },
             Ok(expr) => Ok(expr),
+        }
+    }
+
+    fn brackets(&mut self) -> Result<Box<dyn Eval>, String> {
+        match self.function_call() {
+            Ok(mut expr) => {
+                while self.check_type(&TokenType::BRA) {
+                    let operator = self.advance();
+                    expr = match self.term() {
+                        Ok(index) => {
+                            let ret = Box::new(AST::Index::new(expr, operator.clone(), index));
+                            self.consume(TokenType::KET, "Expect ']'")?;
+                            ret
+                        },
+                        Err(e) => return Err(e),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
         }
     }
 

@@ -495,16 +495,14 @@ impl Callable for NativeFunction {
 
 #[derive(Debug, Clone)]
 pub enum NativeClass {
-    LIST(Rc<RefCell<Vec<Type>>>),
+    LIST,
 }
 
 impl Callable for NativeClass {
     fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         match self {
-            NativeClass::LIST(list) => {
-                for arg in args {
-                    list.borrow_mut().push(arg.clone());
-                }
+            NativeClass::LIST => {
+                let list = Rc::new(RefCell::new(args.clone()));
                 let class = Class::new("list".to_string(), vec![].into());
                 let mut fields: HashMap<String, Box<Type>> = HashMap::new();
                 fields.insert("index".to_string(), Box::new(Type::NATIVE(NativeFunction::INDEX(list.clone()))));
