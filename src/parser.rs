@@ -109,6 +109,7 @@ impl Parser {
     // ("from" module)? "import" (module | item) ("as" alias)? ";"
     // Import { from: module, import: item, alias }
     fn import_statement(&mut self) -> Result<Box<dyn Eval>, String> {
+        println!("{}", self.peek().line);
         let mut alias: Option<Token> = None;
         if self.check_type(&TokenType::FROM) {
             self.advance(); // consume "from"

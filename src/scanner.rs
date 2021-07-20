@@ -192,6 +192,7 @@ impl Scanner {
                     while !(self.is_eof() || self.cell() == '\n') { 
                         self.current += 1;
                     }
+                    self.line += 1;
                 } else if self.next('*') {
                     self.multi_line_comment += 1;
                     self.current += 1;
