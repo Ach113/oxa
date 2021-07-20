@@ -3,6 +3,9 @@ use crate::AST;
 use crate::AST::Eval;
 use crate::types::{Type, Function};
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 // operators supported by each type of expression
 const EQUALITIES: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
 const COMPARISONS: [TokenType; 4] = [TokenType::GREATER, TokenType::GREATER_EQUAL, TokenType::LESS, TokenType::LESS_EQUAL];
@@ -50,7 +53,6 @@ impl Parser {
 
     // returns current token, increments index
     fn advance(&mut self) -> Token {
-        //println!("{}", self.peek());
         if !self.at_end() {
             self.current += 1;
         }
@@ -91,6 +93,7 @@ impl Parser {
     fn declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         let keyword = self.peek().t;
         match keyword {
+            TokenType::IMPORT | TokenType::FROM => self.import_statement(),
             TokenType::VAR => self.var_declaration(),
             TokenType::FUN => {
                 match self.function_declaration() {
@@ -101,6 +104,33 @@ impl Parser {
             TokenType::CLASS => self.class_declaration(),
             _ => self.statement()
         }
+    }
+
+    // ("from" module)? "import" (module | item) ("as" alias)? ";"
+    // Import { from: module, import: item, alias }
+    fn import_statement(&mut self) -> Result<Box<dyn Eval>, String> {
+        let mut alias: Option<Token> = None;
+        if self.check_type(&TokenType::FROM) {
+            self.advance(); // consume "from"
+            let module = self.consume(TokenType::IDENTIFIER, "Expect identifier after `from`")?;
+            self.consume(TokenType::IMPORT, "Expect `import`")?;
+            let item = self.consume(TokenType::IDENTIFIER, "Expect identifier after `import`")?;
+            if self.check_type(&TokenType::AS) {
+                self.advance(); // consume "as"
+                alias = Some(self.consume(TokenType::IDENTIFIER, "Expect identifier after `as`")?);
+            }
+            self.consume(TokenType::SEMICOLON, "Expect ';' after statement")?;
+            return Ok(Box::new(AST::Import::new(module, Some(item), alias)))
+        }
+        self.consume(TokenType::IMPORT, "Expect `import`")?; // consume "import" token
+        let module = self.consume(TokenType::IDENTIFIER, "Expect identifier after `import`")?;
+        // check for alias
+        if self.check_type(&TokenType::AS) {
+            self.advance(); // consume "as"
+            alias = Some(self.consume(TokenType::IDENTIFIER, "Expect identifier after `as`")?);
+        }
+        self.consume(TokenType::SEMICOLON, "Expect ';' after statement")?;
+        Ok(Box::new(AST::Import::new(module, None, alias)))
     }
 
     // "class" identifier "{" function* "}"
@@ -121,7 +151,7 @@ impl Parser {
 
     // "fun" identifier "(" args[] ")" block_stmt
     fn function_declaration(&mut self) -> Result<AST::FunDeclaration, String> {
-        self.advance(); // consume "fun" token
+        self.consume(TokenType::FUN, "Expect 'fun' before function declaration")?;
         self.function_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after function declaration")?;
         self.consume(TokenType::LEFT_PAREN, "Expect '(' after function declaration")?;
@@ -491,7 +521,6 @@ impl Parser {
 
     // grammar supports curried functions
     fn function_call(&mut self) -> Result<Box<dyn Eval>, String> {
-        let ret_index = self.current;
         match self.primary() {
             Ok(mut expr) => {
                 loop {
@@ -512,28 +541,13 @@ impl Parser {
                             }
                         }
                         let paren = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments")?;
-                        // method parsing
-                        // KINDA IFFY, NEEDS ATTENTION
-                        if expr.get_type() == String::from("Getter") {
-                            self.current = ret_index;
-                            expr = self.primary()?;
-                            self.advance(); // consume '.'
-                            let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
-                            let getter = AST::Get::new(name, expr);
-                            expr = Box::new(AST::Call::new(Box::new(AST::Variable::new(getter.name.clone())), Some(getter), paren, arguments));
-                            while !self.check_type(&TokenType::RIGHT_PAREN) {
-                                self.advance();
-                            }
-                            self.advance(); // consume ')'
-                        } else {
-                            expr = Box::new(AST::Call::new(expr, None, paren, arguments));
-                        }
+                        expr = Box::new(AST::Call::new(expr, paren, arguments));
                     } else if self.check_type(&TokenType::DOT) {
                         self.advance(); // consume '.'
                         let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
                         expr = Box::new(AST::Get::new(name, expr));
                     } else {
-                        break;
+                        return Ok(expr);
                     }
                 }
                 Ok(expr)

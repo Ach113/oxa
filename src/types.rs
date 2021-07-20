@@ -1,9 +1,11 @@
 use std::fmt;
+use std::time::{SystemTime, UNIX_EPOCH};
 use core::ops::{Add, Sub, Mul, Div, BitOr, BitAnd, BitXor, Rem};
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::prelude::*;
 
 use crate::AST::{BlockStmt, Error};
 use crate::interpreter::interpret;
@@ -19,6 +21,7 @@ pub enum Type {
     METHOD(Function),
     CLASS(Class),
     OBJECT(Object),
+    NATIVE(NativeFunction),
     NIL,
 }
 
@@ -29,6 +32,7 @@ impl fmt::Display for Type {
             Type::NUMERIC(x) => write!(f, "{}", x),
             Type::BOOL(x) => write!(f, "{}", x),
             Type::FUN(x) => write!(f, "<fun {}>", x.name),
+            Type::NATIVE(x) => write!(f, "<fun {:?}>", x),
             Type::METHOD(x) => write!(f, "<method {}>", x.name),
             Type::CLASS(x) => write!(f, "<class {}>", x.name),
             Type::OBJECT(x) => write!(f, "<instance of {}>", x.class.name),
@@ -176,6 +180,7 @@ impl Type {
             Type::STRING(_) => "string".to_string(),
             Type::BOOL(_) => "bool".to_string(),
             Type::FUN(_) => "function".to_string(),
+            Type::NATIVE(_) => "function".to_string(),
             Type::METHOD(_) => "method".to_string(),
             Type::CLASS(_) => "class".to_string(),
             Type::OBJECT(_) => "object".to_string(),
@@ -187,11 +192,13 @@ impl Type {
 /*** FUNCTION ***/
 
 pub trait Callable {
-    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error>;
 }
 
 #[derive(Clone)]
 pub struct Function {
+    pub self_: Option<Object>,
+    self_id: Option<String>,
     arity: usize, // number of arguments function takes
     address: u64, // line where function is declared
     pub name: String, // function identifier
@@ -201,7 +208,12 @@ pub struct Function {
 
 impl Function {
     pub fn new(name: String, address: u64, body: Rc<RefCell<BlockStmt>>, args: Vec<String>) -> Self {
-        Function {arity: args.len(), name, address, body, args}
+        Function {self_: None, self_id: None, arity: args.len(), name, address, body, args}
+    }
+
+    pub fn bind_self(&mut self, obj: Object, obj_id: Option<String>) {
+        self.self_ = Some(obj);
+        self.self_id = obj_id;
     }
 }
 
@@ -215,7 +227,8 @@ impl fmt::Debug for Function {
 }
 
 impl Callable for Function {
-    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+
         if args.len() != self.arity {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
             return Err(Error::STRING("function arity error".into()));
@@ -227,31 +240,8 @@ impl Callable for Function {
             let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
             enclosing.borrow_mut().add(t, value.clone());
         }
-        // interpret the function
-        let mut res = Type::NIL;
-        for stmt in &(self.body.borrow().statements) {
-            match stmt.eval(enclosing.clone()) {
-                Err(e) => {
-                    match e {
-                        Error::BREAK | Error::CONTINUE => return Err(e),
-                        Error::RETURN(x) => return Ok(x),
-                        _ => return Err(e),
-                    }
-                },
-                Ok(x) => res = x,
-            }
-        }
-        if let Some(s) = self_ {
-            let t = Token::new(String::from("self"), Type::NIL, TokenType::IDENTIFIER, self.address);
-            if let Type::OBJECT(obj) = enclosing.borrow_mut().get(t)? {
-                for (field, value) in obj.fields.iter() {
-                    s.borrow_mut().set(field.to_string(), *(value.clone()));
-                }
-            }
-        }
-        return Ok(res);
-        /*
-        match interpret(&(self.body.borrow().statements), enclosing) {
+        
+        let res = match interpret(&(self.body.borrow().statements), enclosing.clone()) {
             Ok(x) => Ok(x),
             Err(e) => {
                 match e {
@@ -259,8 +249,14 @@ impl Callable for Function {
                     _ => Err(e),
                 }
             }
+        };
+        if let Some(id) = &self.self_id {
+            let t = Token::new(self.args[0].clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
+            let value = enclosing.borrow().get(t)?;
+            let id = Token::new(id.to_string(), Type::NIL, TokenType::IDENTIFIER, self.address);
+            enclosing.borrow_mut().enclosing.as_ref().unwrap().borrow_mut().assign(id, value);
         }
-        */
+        res
     }
 }
 
@@ -301,7 +297,7 @@ impl fmt::Debug for Class {
 
 impl Callable for Class {
     // class constructor
-    fn call(&self, self_: Option<Rc<RefCell<Object>>>, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         if args.len() != self.arity() {
             crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity(), args.len()), callee.line);
             return Err(Error::STRING("constructor arity error".into()));
@@ -352,53 +348,78 @@ impl fmt::Debug for Object {
     }
 }
 
-/* METHOD
-#[derive(Clone)]
-pub struct Method {
-    arity: usize, // number of arguments function takes
-    address: u64, // line where function is declared
-    pub name: String, // function identifier
-    body: Rc<RefCell<BlockStmt>>, // executable body of function
-    args: Vec<String>, // name of accepted parameters
+// Native functions
+#[derive(Debug, Clone)]
+pub enum NativeFunction {
+    INPUT,
+    READ,
+    WRITE,
+    TIME,
 }
 
-impl Method {
-    pub fn new(name: String, address: u64, body: Rc<RefCell<BlockStmt>>, args: Vec<String>) -> Self {
-        Method {arity: args.len(), name, address, body, args}
-    }
-}
-
-impl fmt::Debug for Method {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_struct("Method")
-           .field("identifier", &self.name)
-           .field("address", &self.address)
-           .finish()
-    }
-}
-
-impl Callable for Method {
+impl Callable for NativeFunction {
     fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
-        if args.len() != self.arity {
-            crate::error("TypeError", &format!("{}() takes {} positional arguments, {} were provided", self.name, self.arity, args.len()), callee.line);
-            return Err(Error::STRING("function arity error".into()));
-        }
-        // new scope for the function
-        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env))));
-        // insert function arguments into function scope
-        for (identifier, value) in self.args.iter().zip(args.iter()) {
-            let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
-            enclosing.borrow_mut().add(t, value.clone());
-        }
-        match interpret(&(self.body.borrow().statements), enclosing) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                match e {
-                    Error::RETURN(x) => Ok(x),
-                    _ => Err(e),
+        match self {
+            NativeFunction::INPUT => {
+                if args.len() != 0 {
+                    crate::error("TypeError", &format!("read takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
                 }
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).expect("IOError: failed to read from stdin");
+                match input.trim().parse::<f64>() {
+                    Ok(x) => return Ok(Type::NUMERIC(x)),
+                    Err(_) => return Ok(Type::STRING(input.trim().to_string())),
+                }
+                Ok(Type::NIL)
+            },
+            NativeFunction::READ => {
+                if args.len() == 1 {
+                    if let Type::STRING(filename) = &args[0] {
+                        match std::fs::read_to_string(&filename) {
+                            Ok(s) => {
+                                return Ok(Type::STRING(s));
+                            },
+                            Err(_) => {
+                                crate::error("FileNotFound", &format!("file `{}` could not be found", filename), callee.line);
+                                return Err(Error::STRING("FileNotFound".into()));
+                            }
+                        }
+                    } else {
+                        crate::error("TypeError", &format!("invalid file handle {}", args[0].clone().get_type()), callee.line);
+                        return Err(Error::STRING("TypeError".into()));
+                    }
+                } else {
+                    crate::error("TypeError", &format!("read takes 1 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
+            NativeFunction::WRITE => {
+                if args.len() == 2 {
+                    match (args[0].clone(), args[1].clone()) {
+                        (Type::STRING(filename), Type::STRING(value)) => {
+                            let mut file = std::fs::File::create(&filename).expect(&format!("IOError: could not create {}", &filename));
+                        file.write_all(value.as_bytes()).expect(&format!("IOError: could not write to {}", &filename));
+                        return Ok(Type::NIL);
+                        },
+                        _ => {
+                            crate::error("TypeError", &format!("expected (String, String), got ({}, {})", args[0].clone().get_type(), args[1].clone().get_type()), callee.line);
+                            return Err(Error::STRING("TypeError".into()));
+                        },
+                    }
+                    
+                } else {
+                    crate::error("TypeError", &format!("write takes 2 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("TypeError".into()));
+                }
+            },
+            NativeFunction::TIME => {
+                if args.len() != 0 {
+                    crate::error("TypeError", &format!("read takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+                return Ok(Type::NUMERIC(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as f64));
             }
         }
     }
 }
-*/

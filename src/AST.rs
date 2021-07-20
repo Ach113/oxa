@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::fmt;
+use std::collections::HashMap;
 
 use crate::types::{Type, Function, Callable, Class, Object};
 use crate::tokens::{Token, TokenType};
@@ -387,14 +388,13 @@ impl Eval for LogicalExpr {
 // function call
 pub struct Call {
     identifier: Box<dyn Eval>, // function identifier
-    callee: Option<Get>, // callee object for method calls
     paren: Token,
     arguments: Vec<Box<dyn Eval>>
 }
 
 impl Call {
-    pub fn new(identifier: Box<dyn Eval>, callee: Option<Get>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
-        Call {identifier, callee, paren, arguments}
+    pub fn new(identifier: Box<dyn Eval>, paren: Token, arguments: Vec<Box<dyn Eval>>) -> Self {
+        Call {identifier, paren, arguments}
     }
 }
 
@@ -404,53 +404,39 @@ impl Eval for Call {
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        // initialize the argument vector
         let mut args: Vec<Type> = Vec::new();
+        // evaluate the list of arguments
         for arg in &self.arguments {
            args.push(arg.eval(env.clone())?);
-        }       
-        // if callee is present, we have a method at hand
-        match &self.callee {
-            Some(getter) => {
-                match getter.eval(env.clone())? {
+        }
+        let callable: Box<dyn Callable> = match self.identifier.eval(env.clone()) {
+            Ok(obj) => {
+                match obj {
+                    Type::FUN(f) => Box::new(f),
+                    Type::CLASS(c) => Box::new(c),
+                    Type::NATIVE(f) => Box::new(f),
                     Type::METHOD(m) => {
-                        if let Type::OBJECT(obj) = getter.object.eval(env.clone())? {
+                        if let Some(obj) = &m.self_ {
                             args.insert(0, Type::OBJECT(obj.clone()));
-                            let obj_ref = Rc::new(RefCell::new(obj));
-                            let res = m.call(Some(obj_ref.clone()), args, env.clone(), self.paren.clone());
-                            // update the value of callee
-                            let object_id = &getter.object.get_type()[10..];
-                            let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, 666);
-                            env.borrow_mut().assign(object_id.clone(), Type::OBJECT(obj_ref.borrow().clone()));
-                            return res;
                         }
-                        return Err(Error::STRING("invalid callee".into()));
+                        Box::new(m)
                     },
                     _ => {
-                        crate::error("TypeError", &format!("type '{}' is not a method", self.identifier.get_type()), self.paren.line);
-                        return Err(Error::STRING("not a method".into()));
-                    }
-                }
-            },
-            _ => {
-                match self.identifier.eval(env.clone())? {
-                    Type::FUN(f) => return f.call(None, args, env.clone(), self.paren.clone()),
-                    Type::CLASS(c) => return c.call(None, args, env.clone(), self.paren.clone()),
-                    //Type::METHOD(m) => return m.call(None, args, env.clone(), self.paren.clone()),
-                    _ => {
-                        crate::error("TypeError", &format!("type '{}' is not callable", self.identifier.get_type()), self.paren.line);
+                        crate::error("TypeError", &format!("type '{}' is not callable", obj.get_type()), self.paren.line);
                         return Err(Error::STRING("type not callable".into()));
                     },
-                } 
+                }
             },
-        }
+            Err(e) => return Err(e),
+        };
+        (*callable).call(args, env.clone(), self.paren.clone())
     }
 }
 
 // class property access
 pub struct Get {
     pub name: Token,
-    object: Box<dyn Eval>,
+    object: Box<dyn Eval>, 
 }
 
 impl Get {
@@ -469,7 +455,21 @@ impl Eval for Get {
         match self.object.eval(env.clone()) {
             Ok(obj) => {
                 match obj {
-                    Type::OBJECT(x) => x.get(&self.name),
+                    Type::OBJECT(x) => {
+                        match x.get(&self.name)? {
+                            // bind "self" to the method
+                            // if self.object evaluates to variable, it can be modified, otherwise its read only (all changes get discarded)
+                            Type::METHOD(mut f) => {
+                                if self.object.get_type().contains("Variable") {
+                                    f.bind_self(x, Some(self.object.get_type()[10..].to_string()));
+                                } else {
+                                    f.bind_self(x, None);
+                                }
+                                Ok(Type::METHOD(f))
+                            },
+                            _ => x.get(&self.name),
+                        }
+                    },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
                         Err(Error::STRING("type has no attributes".into()))
@@ -492,7 +492,7 @@ pub struct Set {
 impl Set {
     pub fn new(name: Token, object: Box<dyn Eval>, value: Box<dyn Eval>) -> Self {
         let object_id = &object.get_type()[10..];
-        let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, 666);
+        let object_id = Token::new(object_id.to_string(), Type::STRING(object_id.to_string()), TokenType::IDENTIFIER, name.line);
         Set {name, object_id, object, value}
     }
 }
@@ -510,7 +510,6 @@ impl Eval for Set {
                         let value = self.value.eval(env.clone())?;
                         env.borrow_mut().assign(self.object_id.clone(), x.set(self.name.lexeme.clone(), value.clone())?);
                         Ok(value)
-                        //x.set(self.name.lexeme.clone(), self.value.eval(env.clone())?)
                     },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
@@ -705,7 +704,7 @@ impl Eval for WhileLoop {
 
         while self.condition.eval(env.clone())? == Type::BOOL(true) {
             for stmt in &self.body.statements {
-                let ret = stmt.eval(enclosing.clone());
+                ret = stmt.eval(enclosing.clone());
                 match ret {
                     Ok(_) => {},
                     Err(e) => {
@@ -786,11 +785,7 @@ impl Eval for FunDeclaration {
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         // add function declaration to the symbol table
-        if self.f.args.len() == 0 || self.f.args[0] != String::from("self") {
-            env.borrow_mut().add(self.identifier.clone(), Type::FUN(self.f.clone()))?;
-        } else {
-            env.borrow_mut().add(self.identifier.clone(), Type::METHOD(self.f.clone()))?;
-        }
+        env.borrow_mut().add(self.identifier.clone(), Type::FUN(self.f.clone()))?;
         Ok(Type::NIL)
     }
 }
@@ -837,5 +832,81 @@ impl Eval for ClassDeclr {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         env.borrow_mut().add(self.name.clone(), Type::CLASS(self.class.clone()))?;
         Ok(Type::NIL)
+    }
+}
+
+// import statement
+pub struct Import {
+    module: Token,
+    item: Option<Token>,
+    alias: Option<Token>
+}
+
+impl Import {
+    pub fn new(module: Token, item: Option<Token>, alias: Option<Token>) -> Self {
+        Import {module, item, alias}
+    }
+}
+
+impl Eval for Import {
+    fn get_type(&self) -> String {
+        String::from("Import")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+        let module_name = format!("{}.oxa", self.module.lexeme);
+        match std::fs::read_to_string(module_name.clone()) {
+            Ok(code) => {
+                // create class <module>
+                let methods: Vec<Function> = Vec::new();
+                let class = Class::new(String::from("__module__"), methods);
+                let t = Token::new(String::from("__module__"), Type::NIL, TokenType::NIL, self.module.line);
+                env.borrow_mut().add(t, Type::CLASS(class.clone()))?;
+                // create new environment for the module and execute module code
+                let module_env = Rc::new(RefCell::new(Environment::new(None)));
+                match crate::run(code, module_env.clone()) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Err(Error::STRING(e));
+                    }
+                }
+                match &self.item {
+                    None => {
+                        // bring symbol table of module inside current scope
+                        let mut fields: HashMap<String, Box<Type>> = HashMap::new();
+                        for (identifier, value) in module_env.borrow().symbol_table.iter() {
+                            fields.insert(identifier.clone(), Box::new(value.clone()));
+                        }
+                        let object = Type::OBJECT(Object::new(class, fields));
+                        match &self.alias {
+                            Some(t) => {
+                                env.borrow_mut().add(t.clone(), object);
+                            },
+                            _ => {
+                                let t = Token::new(self.module.lexeme.clone(), Type::NIL, TokenType::NIL, self.module.line);
+                                env.borrow_mut().add(t, object);
+                            }
+                        }
+                    },
+                    Some(t) => {
+                        match &self.alias {
+                            Some(a) => {
+                                let value = module_env.borrow().get(t.clone())?;
+                                env.borrow_mut().add(a.clone(), value);
+                            },
+                            None => {
+                                let value = module_env.borrow().get(t.clone())?;
+                                env.borrow_mut().add(t.clone(), value);
+                            }
+                        }
+                    }
+                }
+                Ok(Type::NIL)
+            },
+            Err(_) => {
+                crate::error("FileNotFound", &format!("file `{}` could not be found", module_name), self.module.line);
+                Err(Error::STRING("FileNotFound".into()))
+            }
+        }
     }
 }

@@ -63,6 +63,9 @@ impl Scanner {
             "xor" => Token::new(identifier.to_string(), Type::NIL, TokenType::XOR, self.line),
             "break" => Token::new(identifier.to_string(), Type::NIL, TokenType::BREAK, self.line),
             "continue" => Token::new(identifier.to_string(), Type::NIL, TokenType::CONTINUE, self.line),
+            "import" => Token::new(identifier.to_string(), Type::NIL, TokenType::IMPORT, self.line),
+            "as" => Token::new(identifier.to_string(), Type::NIL, TokenType::AS, self.line),
+            "from" => Token::new(identifier.to_string(), Type::NIL, TokenType::FROM, self.line),
             _ => {
                 Token::new(identifier.to_string(), Type::NIL, TokenType::IDENTIFIER, self.line)
             },
@@ -203,7 +206,7 @@ impl Scanner {
                 }
             },
             '\n' => self.line += 1,
-            '\r' | ' ' => {},
+            '\r' | ' ' | '\t' => {},
             // default 
             _ => {
                 if c.is_digit(10) {
