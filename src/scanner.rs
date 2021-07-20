@@ -153,6 +153,8 @@ impl Scanner {
             ';' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::SEMICOLON, self.line)),
             '*' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::STAR, self.line)),
             '%' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::PERCENT, self.line)),
+            '[' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::BRA, self.line)),
+            ']' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::KET, self.line)),
             // two char tokens
             '!' => self.tokens.push(
                 if self.next('=') {

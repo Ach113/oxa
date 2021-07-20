@@ -18,6 +18,8 @@ pub enum TokenType {
     SLASH,
     PERCENT,
     STAR,
+    BRA,
+    KET,
 
     // One or two character tokens.
     BANG, 

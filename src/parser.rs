@@ -401,8 +401,7 @@ impl Parser {
         match self.logical_and() {
             Ok(mut expr) => {
                 while self.check_type(&TokenType::OR) || self.check_type(&TokenType::XOR) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.logical_and() {
                         Ok(right) => Box::new(AST::LogicalExpr::new(operator, expr, right).unwrap()),
                         Err(e) => return Err(e),
@@ -418,8 +417,7 @@ impl Parser {
         match self.equality() {
             Ok(mut expr) => {
                 while self.check_type(&TokenType::AND) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.equality() {
                         Ok(right) => Box::new(AST::LogicalExpr::new(operator, expr, right).unwrap()),
                         Err(e) => return Err(e),
@@ -436,8 +434,7 @@ impl Parser {
         match self.comparison() {
             Ok(mut expr) => {
                 while EQUALITIES.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.comparison() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(e) => return Err(e),
@@ -454,8 +451,7 @@ impl Parser {
         match self.term() {
             Ok(mut expr) => {
                 while COMPARISONS.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.term() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
@@ -471,8 +467,7 @@ impl Parser {
         match self.factor() {
             Ok(mut expr) => {
                 while TERMS.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.factor() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
@@ -488,8 +483,7 @@ impl Parser {
         match self.unary() {
             Ok(mut expr) => {
                 while FACTORS.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.unary() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
@@ -503,8 +497,7 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Box<dyn Eval>, String> {
         if UNARIES.iter().any(|x| self.check_type(x)) {
-            self.advance();
-            let operator = self.previous();
+            let operator = self.advance();
             match self.unary() {
                 Ok(right) => return Ok(Box::new(AST::Unary::new(operator, right).unwrap())),
                 Err(right) => return Err(right),
