@@ -55,6 +55,8 @@ pub enum TokenType {
     BREAK,
     CONTINUE,
     IMPORT,
+    AS,
+    FROM,
 
     EOF
 }

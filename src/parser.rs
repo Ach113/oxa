@@ -93,7 +93,7 @@ impl Parser {
     fn declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         let keyword = self.peek().t;
         match keyword {
-            TokenType::IMPORT => self.import_statement(),
+            TokenType::IMPORT | TokenType::FROM => self.import_statement(),
             TokenType::VAR => self.var_declaration(),
             TokenType::FUN => {
                 match self.function_declaration() {
@@ -106,12 +106,31 @@ impl Parser {
         }
     }
 
-    // "import" identifier ";"
+    // ("from" module)? "import" (module | item) ("as" alias)? ";"
+    // Import { from: module, import: item, alias }
     fn import_statement(&mut self) -> Result<Box<dyn Eval>, String> {
-        self.advance(); // consume "import" token
-        let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after 'import'")?;
+        let mut alias: Option<Token> = None;
+        if self.check_type(&TokenType::FROM) {
+            self.advance(); // consume "from"
+            let module = self.consume(TokenType::IDENTIFIER, "Expect identifier after `from`")?;
+            self.consume(TokenType::IMPORT, "Expect `import`")?;
+            let item = self.consume(TokenType::IDENTIFIER, "Expect identifier after `import`")?;
+            if self.check_type(&TokenType::AS) {
+                self.advance(); // consume "as"
+                alias = Some(self.consume(TokenType::IDENTIFIER, "Expect identifier after `as`")?);
+            }
+            self.consume(TokenType::SEMICOLON, "Expect ';' after statement")?;
+            return Ok(Box::new(AST::Import::new(module, Some(item), alias)))
+        }
+        self.consume(TokenType::IMPORT, "Expect `import`")?; // consume "import" token
+        let module = self.consume(TokenType::IDENTIFIER, "Expect identifier after `import`")?;
+        // check for alias
+        if self.check_type(&TokenType::AS) {
+            self.advance(); // consume "as"
+            alias = Some(self.consume(TokenType::IDENTIFIER, "Expect identifier after `as`")?);
+        }
         self.consume(TokenType::SEMICOLON, "Expect ';' after statement")?;
-        Ok(Box::new(AST::Import::new(identifier)))
+        Ok(Box::new(AST::Import::new(module, None, alias)))
     }
 
     // "class" identifier "{" function* "}"

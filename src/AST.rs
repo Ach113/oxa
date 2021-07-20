@@ -837,12 +837,14 @@ impl Eval for ClassDeclr {
 
 // import statement
 pub struct Import {
-    module: Token
+    module: Token,
+    item: Option<Token>,
+    alias: Option<Token>
 }
 
 impl Import {
-    pub fn new(module: Token) -> Self {
-        Import {module}
+    pub fn new(module: Token, item: Option<Token>, alias: Option<Token>) -> Self {
+        Import {module, item, alias}
     }
 }
 
@@ -857,8 +859,8 @@ impl Eval for Import {
             Ok(code) => {
                 // create class <module>
                 let methods: Vec<Function> = Vec::new();
-                let class = Class::new(String::from("__MODULE__"), methods);
-                let t = Token::new(String::from("__MODULE__"), Type::NIL, TokenType::NIL, self.module.line);
+                let class = Class::new(String::from("__module__"), methods);
+                let t = Token::new(String::from("__module__"), Type::NIL, TokenType::NIL, self.module.line);
                 env.borrow_mut().add(t, Type::CLASS(class.clone()))?;
                 // create new environment for the module and execute module code
                 let module_env = Rc::new(RefCell::new(Environment::new(None)));
@@ -868,14 +870,37 @@ impl Eval for Import {
                         return Err(Error::STRING(e));
                     }
                 }
-                // bring symbol table of module inside current scope
-                let mut fields: HashMap<String, Box<Type>> = HashMap::new();
-                for (identifier, value) in module_env.borrow().symbol_table.iter() {
-                    fields.insert(identifier.clone(), Box::new(value.clone()));
+                match &self.item {
+                    None => {
+                        // bring symbol table of module inside current scope
+                        let mut fields: HashMap<String, Box<Type>> = HashMap::new();
+                        for (identifier, value) in module_env.borrow().symbol_table.iter() {
+                            fields.insert(identifier.clone(), Box::new(value.clone()));
+                        }
+                        let object = Type::OBJECT(Object::new(class, fields));
+                        match &self.alias {
+                            Some(t) => {
+                                env.borrow_mut().add(t.clone(), object);
+                            },
+                            _ => {
+                                let t = Token::new(self.module.lexeme.clone(), Type::NIL, TokenType::NIL, self.module.line);
+                                env.borrow_mut().add(t, object);
+                            }
+                        }
+                    },
+                    Some(t) => {
+                        match &self.alias {
+                            Some(a) => {
+                                let value = module_env.borrow().get(t.clone())?;
+                                env.borrow_mut().add(a.clone(), value);
+                            },
+                            None => {
+                                let value = module_env.borrow().get(t.clone())?;
+                                env.borrow_mut().add(t.clone(), value);
+                            }
+                        }
+                    }
                 }
-                let object = Type::OBJECT(Object::new(class, fields));
-                let t = Token::new(self.module.lexeme.clone(), Type::NIL, TokenType::NIL, self.module.line);
-                env.borrow_mut().add(t, object);
                 Ok(Type::NIL)
             },
             Err(_) => {

@@ -64,6 +64,8 @@ impl Scanner {
             "break" => Token::new(identifier.to_string(), Type::NIL, TokenType::BREAK, self.line),
             "continue" => Token::new(identifier.to_string(), Type::NIL, TokenType::CONTINUE, self.line),
             "import" => Token::new(identifier.to_string(), Type::NIL, TokenType::IMPORT, self.line),
+            "as" => Token::new(identifier.to_string(), Type::NIL, TokenType::AS, self.line),
+            "from" => Token::new(identifier.to_string(), Type::NIL, TokenType::FROM, self.line),
             _ => {
                 Token::new(identifier.to_string(), Type::NIL, TokenType::IDENTIFIER, self.line)
             },
