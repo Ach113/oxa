@@ -280,13 +280,10 @@ impl Class {
     }
 
     pub fn arity(&self) -> usize {
-        0
-        /*
         match self.methods.get("init") {
-            Some(f) => f.arity,
+            Some(f) => f.arity - 1,
             None => 0,
         }
-        */
     }
 }
 
@@ -312,7 +309,19 @@ impl Callable for Class {
         for (key, value) in &self.methods {
             fields.insert(key.clone(), Box::new(Type::METHOD(value.clone())));
         }
-        Ok(Type::OBJECT(Object::new(self.clone(), fields)))
+        let obj = Object::new(self.clone(), fields);
+        if self.methods.get("init").is_some() {
+            // insert "self" as argument
+            let mut args = args.clone();
+            args.insert(0, Type::OBJECT(obj.clone()));
+            // bind "self" to the method
+            let t = Token::new("init".to_string(), Type::NIL, TokenType::NIL, callee.line);
+            if let Type::METHOD(mut f) = obj.get(&t)? {
+                f.bind_self(obj, None);
+                return f.call(args, enclosing, callee);
+            }
+        }
+        Ok(Type::OBJECT(obj))
     }
 }
 
@@ -534,6 +543,7 @@ impl Callable for NativeFunction {
 #[derive(Debug, Clone)]
 pub enum NativeClass {
     LIST,
+    DICT,
 }
 
 impl Callable for NativeClass {
@@ -551,6 +561,15 @@ impl Callable for NativeClass {
                 let i = Rc::new(Cell::new(0usize));
                 fields.insert("next".to_string(), Box::new(Type::NATIVE(NativeFunction::NEXT(list.clone(), i.clone()))));
                 Ok(Type::OBJECT(Object::new(class, fields)))
+            },
+            NativeClass::DICT => {
+                if args.len() > 0 {
+                    crate::error("TypeError", &format!("`dict` takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+                let map: HashMap<Type, Type> = HashMap::new();
+                let dict = Rc::new(RefCell::new(map));
+                todo!();
             }
         }
     }

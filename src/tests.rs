@@ -112,6 +112,7 @@ mod tests {
               self.a = a;
               self.b = b;
               self.c = c;
+              return self;
             }
                   
             fun sum(self) {
@@ -119,8 +120,7 @@ mod tests {
             }
          }
                   
-        var foo = Foo();
-        foo.init(1, 2, 3);
+        var foo = Foo(1, 2, 3);
         foo.sum()".to_string(), env.clone())?);
         // nested classes
         assert_eq!(Type::NUMERIC(13.0), crate::run("class Foo {              

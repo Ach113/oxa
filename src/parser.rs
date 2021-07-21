@@ -133,11 +133,21 @@ impl Parser {
         Ok(Box::new(AST::Import::new(module, None, alias)))
     }
 
-    // "class" identifier "{" function* "}"
+    // "class" identifier ("<" identifier)? "{" function* "}"
     fn class_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume "class" token
         self.class_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after class declaration")?;
+        let mut superclass: Option<Token> = None;
+        if self.check_type(&TokenType::LESS) {
+            self.advance();
+            let s = self.consume(TokenType::IDENTIFIER, "Expect superclass identifier after `<`")?;
+            if s.lexeme == identifier.lexeme {
+                crate::error("NameError", "cannot inherit from self", identifier.line);
+                return Err("NameError".to_string());
+            }
+            superclass = Some(s);
+        }
         self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body")?;
 
         let mut methods: Vec<Function> = Vec::new();
@@ -146,7 +156,7 @@ impl Parser {
         }
         self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body")?;
         self.class_counter -= 1;
-        Ok(Box::new(AST::ClassDeclr::new(identifier, methods)))
+        Ok(Box::new(AST::ClassDeclr::new(identifier, superclass, methods)))
     }
 
     // "fun" identifier "(" args[] ")" block_stmt

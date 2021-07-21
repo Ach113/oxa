@@ -886,13 +886,14 @@ impl Eval for Return {
 // class declaration
 pub struct ClassDeclr {
     name: Token,
+    superclass: Option<Token>,
     class: Class,
 }
 
 impl ClassDeclr {
-    pub fn new(name: Token, methods: Vec<Function>) -> Self {
+    pub fn new(name: Token, superclass: Option<Token>, methods: Vec<Function>) -> Self {
         let class = Class::new(name.lexeme.clone(), methods);
-        ClassDeclr {name: name.clone(), class}
+        ClassDeclr {name: name.clone(), superclass, class}
     }
 }
 

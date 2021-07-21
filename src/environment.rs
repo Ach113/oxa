@@ -7,12 +7,13 @@ use crate::tokens::Token;
 use crate::types::{Type, NativeFunction, NativeClass};
 use crate::AST::Error;
 
-fn add_natives(mut env: &mut Environment) {
+fn add_natives(env: &mut Environment) {
     env.symbol_table.insert("input".to_string(), Type::NATIVE(NativeFunction::INPUT));
     env.symbol_table.insert("read".to_string(), Type::NATIVE(NativeFunction::READ));
     env.symbol_table.insert("write".to_string(), Type::NATIVE(NativeFunction::WRITE));
     env.symbol_table.insert("time".to_string(), Type::NATIVE(NativeFunction::TIME));
     env.symbol_table.insert("list".to_string(), Type::NATIVEC(NativeClass::LIST));
+    env.symbol_table.insert("dict".to_string(), Type::NATIVEC(NativeClass::DICT));
 }
 
 #[derive(Debug)]
@@ -33,7 +34,6 @@ impl Environment {
     }
 
     pub fn add(&mut self, identifier: Token, value: Type) -> Result<(), Error> {
-        let name = &identifier.lexeme;
         self.symbol_table.insert(identifier.lexeme, value);
         Ok(())
     }
