@@ -6,12 +6,12 @@ interpreted, object-oriented programming language. Interpreter written 100% in r
 * [Examples](#examples)
 * [Future Plans](#future-plans)
 
-# Info
+## Info
 oxa is my first language. I took inspiration from [this book](https://craftinginterpreters.com/), which I definitely recommend to anyone interested in writing new languages (or better understanding how computer languages work). The book uses Java to implement an interpreter for a language named LOX, which I have used as a blueprint for writing oxa. 
 
 oxa is very similar (although not identical) to LOX. Considering Rust and Java are very different languages, I had to change some things quite a bit to better suite the implementation language. Additionally, oxa also supports import statements (syntax being identical to Python), lists (along with bracket operator for indexing) and some native functions for dealing with user input, file I/O and time.
 
-# Examples
+## Examples
 
 Hello world program
 ```
@@ -58,6 +58,6 @@ for obj in objects {
 print max; // prints 60
 ```
 
-# Future Plans
+## Future Plans
 
 Since oxa is my hobby project which I started to mainly learn Rust and improve my knowledge of programming languages, I want to continue adding new features to the language. But my next main goal would be turning the interpreter into a bytecode compiler. 
