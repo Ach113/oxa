@@ -15,7 +15,7 @@ oxa is very similar (although not identical) to LOX. Considering Rust and Java a
 
 Hello world program
 ```
-print "Hello World"!;
+print "Hello World!"; 
 ```
 fibonacci sequence
 ```
