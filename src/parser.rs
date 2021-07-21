@@ -427,7 +427,7 @@ impl Parser {
                 }
             } else if expr.get_type() == String::from("Index") {
                 self.current = ret_index;
-                match self.function_call() {
+                match self.primary() {
                     Ok(mut expr) => {
                         while self.check_type(&TokenType::BRA) {
                             let operator = self.advance();
@@ -573,7 +573,7 @@ impl Parser {
                 Err(right) => return Err(right),
             }
         }
-        match self.brackets() {
+        match self.function_call() {
             Err(e) => {
                 self.synchronize();
                 Err(e)
@@ -629,6 +629,18 @@ impl Parser {
                         self.advance(); // consume '.'
                         let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
                         expr = Box::new(AST::Get::new(name, expr));
+                    } else if self.check_type(&TokenType::BRA) { 
+                        while self.check_type(&TokenType::BRA) {
+                            let operator = self.advance();
+                            expr = match self.term() {
+                                Ok(index) => {
+                                    let ret = Box::new(AST::Index::new(expr, operator.clone(), index));
+                                    self.consume(TokenType::KET, "Expect ']'")?;
+                                    ret
+                                },
+                                Err(e) => return Err(e),
+                            };
+                        }
                     } else {
                         return Ok(expr);
                     }

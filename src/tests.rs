@@ -183,6 +183,31 @@ mod tests {
         assert_eq!(Type::NUMERIC(2.0), crate::run("var x = list(list(1, 2)); x[0][1]".to_string(), env.clone())?);
         assert_eq!(Type::NUMERIC(-1.0), crate::run("var x = list(1, 2, 3); x[0] = -1; x[0]".to_string(), env.clone())?);
         assert_eq!(Type::NUMERIC(-1.0), crate::run("var x = list(list(1, 2)); x[0][1] = -1; x[0][1]".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(60.0), crate::run("class Foo {
+          fun init(self, a, b, c) {
+            self.a = a;
+            self.b = b;
+            self.c = c;
+            return self;
+          }
+          fun sum(self) {
+            return self.a + self.b + self.c;
+          }
+        }
+        var max = 0;
+        var objects = list(Foo(1, 2, 3), Foo(4, 5, 6), Foo(7, 8, 9));
+        var vec = list(Foo(10, 20, 30));
+        for obj in objects {
+          if max < obj.sum() {
+            max = obj.sum();
+          }
+        }
+        objects[1] = vec[0];
+        for obj in objects {
+          if max < obj.sum() {
+            max = obj.sum();
+          }
+        }max".to_string(), env.clone())?);
         assert!(crate::run("var x = list(1, 2, 42); x[4] ".to_string(), env.clone()).is_err());
         assert!(crate::run("var x = list(); x.remove(0) ".to_string(), env.clone()).is_err());
         Ok(())

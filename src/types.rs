@@ -268,15 +268,16 @@ impl Callable for Function {
 pub struct Class {
     pub name: String,
     pub methods: HashMap<String, Function>,
+    superclass: Option<Box<Class>>
 }
 
 impl Class {
-    pub fn new(name: String, methods: Vec<Function>) -> Self {
+    pub fn new(name: String, methods: Vec<Function>, superclass: Option<Box<Class>>) -> Self {
         let mut map: HashMap<String, Function> = HashMap::new();
         for method in methods {
             map.insert(method.name.clone(), method);
         }
-        Class {name, methods: map}
+        Class {name, methods: map, superclass}
     }
 
     pub fn arity(&self) -> usize {
@@ -551,7 +552,7 @@ impl Callable for NativeClass {
         match self {
             NativeClass::LIST => {
                 let list = Rc::new(RefCell::new(args.clone()));
-                let class = Class::new("list".to_string(), vec![].into());
+                let class = Class::new("list".to_string(), vec![].into(), None);
                 let mut fields: HashMap<String, Box<Type>> = HashMap::new();
                 fields.insert("index".to_string(), Box::new(Type::NATIVE(NativeFunction::INDEX(list.clone()))));
                 fields.insert("add".to_string(), Box::new(Type::NATIVE(NativeFunction::ADD(list.clone()))));
