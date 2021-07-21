@@ -47,7 +47,7 @@ fn runfile(filename: &str) -> Result<(), String> {
     match std::fs::read_to_string(filename) {
         Ok(code) => {
             let env = Rc::new(RefCell::new(Environment::new(None)));
-            run(code, env);
+            run(code, env)?;
             Ok(())
         },
         Err(_) => {
@@ -81,15 +81,16 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let args: Vec<_> = env::args().collect();
     if args.len() > 2 {
         println!("Usage: oxa [filename]");
         // error code according to https://www.freebsd.org/cgi/man.cgi?query=sysexits&apropos=0&sektion=0&manpath=FreeBSD+4.3-RELEASE&format=html
         std::process::exit(64); 
     } else if args.len() == 2 {
-        runfile(&args[1]);
+        runfile(&args[1])?;
     } else {
         repl();
     }
+    Ok(())
 }

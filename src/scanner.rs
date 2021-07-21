@@ -50,6 +50,7 @@ impl Scanner {
             "class" => Token::new(identifier.to_string(), Type::NIL, TokenType::CLASS, self.line),
             "fun" => Token::new(identifier.to_string(), Type::NIL, TokenType::FUN, self.line),
             "for" => Token::new(identifier.to_string(), Type::NIL, TokenType::FOR, self.line),
+            "in" => Token::new(identifier.to_string(), Type::NIL, TokenType::IN, self.line),
             "if" => Token::new(identifier.to_string(), Type::NIL, TokenType::IF, self.line),
             "else" => Token::new(identifier.to_string(), Type::NIL, TokenType::ELSE, self.line),
             "return" => Token::new(identifier.to_string(), Type::NIL, TokenType::RETURN, self.line),
@@ -153,6 +154,8 @@ impl Scanner {
             ';' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::SEMICOLON, self.line)),
             '*' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::STAR, self.line)),
             '%' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::PERCENT, self.line)),
+            '[' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::BRA, self.line)),
+            ']' => self.tokens.push(Token::new(c.to_string(), Type::NIL, TokenType::KET, self.line)),
             // two char tokens
             '!' => self.tokens.push(
                 if self.next('=') {
@@ -192,6 +195,7 @@ impl Scanner {
                     while !(self.is_eof() || self.cell() == '\n') { 
                         self.current += 1;
                     }
+                    self.line += 1;
                 } else if self.next('*') {
                     self.multi_line_comment += 1;
                     self.current += 1;

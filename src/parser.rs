@@ -207,6 +207,7 @@ impl Parser {
             TokenType::PRINT => self.print_statement(),
             TokenType::RETURN => self.return_statement(),
             TokenType::WHILE => self.while_loop(),
+            TokenType::FOR => self.for_loop(),
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
                     Ok(block) => Ok(Box::new(block)),
@@ -217,7 +218,33 @@ impl Parser {
         }
     }
 
-    // "while" expression "{" statement "}"
+    // "for" identifier "in" expression "{" statement* "}"
+    fn for_loop(&mut self) -> Result<Box<dyn Eval>, String> {
+        self.advance(); // consume "for"
+        let alias = self.consume(TokenType::IDENTIFIER, "Expect identifier after `for`")?;
+        self.consume(TokenType::IN, "Expect `in` after `for` statement")?;
+        let iterable = self.brackets()?;
+        // loop body
+        self.loop_counter += 1;
+        let mut stmt: Option<AST::BlockStmt> = None;
+        if self.check_type(&TokenType::LEFT_BRACE) {
+            match self.block_statement() {
+                Ok(x) => stmt = Some(x),
+                Err(e) => {
+                    self.synchronize();
+                    return Err(e);
+                }
+            }
+        } else {
+            crate::error("SyntaxError", "Expected '{' after 'for' statement", self.previous().line);
+            self.synchronize();
+            return Err("Expected '{' after 'for' statement".into());
+        }
+        self.loop_counter -= 1;
+        Ok(Box::new(AST::ForLoop::new(alias, iterable, stmt.unwrap())))
+    }
+
+    // "while" expression "{" statement* "}"
     fn while_loop(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume "while" token
         // condition
@@ -388,6 +415,39 @@ impl Parser {
                         return Ok(Box::new(AST::Set::new(name, expr, rhs)));
                     },
                 }
+            } else if expr.get_type() == String::from("Index") {
+                self.current = ret_index;
+                match self.function_call() {
+                    Ok(mut expr) => {
+                        while self.check_type(&TokenType::BRA) {
+                            let operator = self.advance();
+                            expr = match self.term() {
+                                Ok(index) => {
+                                    if self.tokens[(self.current + 1) as usize].t == TokenType::EQUAL {
+                                        self.consume(TokenType::KET, "Expect ']'")?;
+                                        let equals = self.consume(TokenType::EQUAL, "Expect `=`")?;
+                                        match self.assignment() {
+                                            Err(e) => {
+                                                crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
+                                                return Err("invalid rhs for assignment".into());
+                                            },
+                                            Ok(rhs) => { 
+                                                return Ok(Box::new(AST::IndexAssignment::new(expr, index, equals, rhs)));
+                                            }
+                                        }
+                                    } else {
+                                        let ret = Box::new(AST::Index::new(expr, operator.clone(), index));
+                                        self.consume(TokenType::KET, "Expect ']'")?;
+                                        ret
+                                    }
+                                },
+                                Err(e) => return Err(e),
+                            };
+                        }
+                        Ok(expr)
+                    },
+                    Err(e) => Err(e),
+                }
             } else {
                 crate::error("SyntaxError", "invalid target variable for assignment", equals.line);
                 return Err("invalid target variable for assignment".into());
@@ -401,8 +461,7 @@ impl Parser {
         match self.logical_and() {
             Ok(mut expr) => {
                 while self.check_type(&TokenType::OR) || self.check_type(&TokenType::XOR) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.logical_and() {
                         Ok(right) => Box::new(AST::LogicalExpr::new(operator, expr, right).unwrap()),
                         Err(e) => return Err(e),
@@ -418,8 +477,7 @@ impl Parser {
         match self.equality() {
             Ok(mut expr) => {
                 while self.check_type(&TokenType::AND) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.equality() {
                         Ok(right) => Box::new(AST::LogicalExpr::new(operator, expr, right).unwrap()),
                         Err(e) => return Err(e),
@@ -436,8 +494,7 @@ impl Parser {
         match self.comparison() {
             Ok(mut expr) => {
                 while EQUALITIES.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.comparison() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(e) => return Err(e),
@@ -454,8 +511,7 @@ impl Parser {
         match self.term() {
             Ok(mut expr) => {
                 while COMPARISONS.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.term() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
@@ -471,8 +527,7 @@ impl Parser {
         match self.factor() {
             Ok(mut expr) => {
                 while TERMS.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.factor() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
@@ -488,8 +543,7 @@ impl Parser {
         match self.unary() {
             Ok(mut expr) => {
                 while FACTORS.iter().any(|x| self.check_type(x)) {
-                    self.advance();
-                    let operator = self.previous();
+                    let operator = self.advance();
                     expr = match self.unary() {
                         Ok(right) => Box::new(AST::Binary::new(operator, expr, right).unwrap()),
                         Err(right) => return Err(right),
@@ -503,19 +557,38 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Box<dyn Eval>, String> {
         if UNARIES.iter().any(|x| self.check_type(x)) {
-            self.advance();
-            let operator = self.previous();
+            let operator = self.advance();
             match self.unary() {
                 Ok(right) => return Ok(Box::new(AST::Unary::new(operator, right).unwrap())),
                 Err(right) => return Err(right),
             }
         }
-        match self.function_call() {
+        match self.brackets() {
             Err(e) => {
                 self.synchronize();
                 Err(e)
             },
             Ok(expr) => Ok(expr),
+        }
+    }
+
+    fn brackets(&mut self) -> Result<Box<dyn Eval>, String> {
+        match self.function_call() {
+            Ok(mut expr) => {
+                while self.check_type(&TokenType::BRA) {
+                    let operator = self.advance();
+                    expr = match self.term() {
+                        Ok(index) => {
+                            let ret = Box::new(AST::Index::new(expr, operator.clone(), index));
+                            self.consume(TokenType::KET, "Expect ']'")?;
+                            ret
+                        },
+                        Err(e) => return Err(e),
+                    };
+                }
+                Ok(expr)
+            },
+            Err(e) => Err(e),
         }
     }
 

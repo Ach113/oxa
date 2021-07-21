@@ -61,6 +61,32 @@ mod tests {
         assert!(crate::run("var i = 0; while i < 10 i = i + 1; i".to_string(), env.clone()).is_err()); // expect '{}' after 'while' cond
         assert!(crate::run("break;".to_string(), env.clone()).is_err()); // break outside loop
         assert!(crate::run("continue;".to_string(), env.clone()).is_err()); // continue outside loop
+        // for loops
+        assert_eq!(Type::NUMERIC(143.0), crate::run("fun fib(x) {
+          if x == 1 or x == 0 {
+            return x;
+          }
+          return fib(x - 1) + fib(x - 2);
+        }
+        var sum = 0;
+        for i in list(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10){
+          sum = sum + fib(i);
+        }
+        sum".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(10.0), crate::run("var sum = 0;
+        for i in list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10){
+            if i == 5 {
+            break;
+          }
+          sum = sum + i;
+        }sum".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(21.0), crate::run("var sum = 0;
+        for i in list(list(1, 2, 3), list(4, 5, 6)){
+            for j in i {
+            sum = sum + j;
+          }
+        }sum".to_string(), env.clone())?);
+        assert!(crate::run("var x = 15; for i in x {}".to_string(), env.clone()).is_err()); // not iterable
         Ok(())
     }
 
@@ -145,6 +171,20 @@ mod tests {
           
           var foo = Foo();
           foo.method();foo.b.x".to_string(), env.clone())?);
+        Ok(())
+    }
+
+    #[test]
+    fn list_test() -> Result<(), String> {
+        let env = Rc::new(RefCell::new(Environment::new(None)));
+        assert_eq!(Type::NUMERIC(42.0), crate::run("var x = list(1, 2, 42); x[2] ".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(4.0), crate::run("var x = list(1, 2, 42); x.add(-1); x.len()".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(2.0), crate::run("var x = list(1, 2, 42); x.remove(2); x.len()".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(2.0), crate::run("var x = list(list(1, 2)); x[0][1]".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(-1.0), crate::run("var x = list(1, 2, 3); x[0] = -1; x[0]".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(-1.0), crate::run("var x = list(list(1, 2)); x[0][1] = -1; x[0][1]".to_string(), env.clone())?);
+        assert!(crate::run("var x = list(1, 2, 42); x[4] ".to_string(), env.clone()).is_err());
+        assert!(crate::run("var x = list(); x.remove(0) ".to_string(), env.clone()).is_err());
         Ok(())
     }
 }
