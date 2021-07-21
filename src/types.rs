@@ -268,25 +268,33 @@ impl Callable for Function {
 pub struct Class {
     pub name: String,
     pub methods: HashMap<String, Function>,
+    superclass: Option<Box<Class>>
 }
 
 impl Class {
-    pub fn new(name: String, methods: Vec<Function>) -> Self {
+    pub fn new(name: String, methods: Vec<Function>, superclass: Option<Box<Class>>) -> Self {
         let mut map: HashMap<String, Function> = HashMap::new();
         for method in methods {
             map.insert(method.name.clone(), method);
         }
-        Class {name, methods: map}
+        Class {name, methods: map, superclass}
+    }
+
+    pub fn get_method(&self, identifier: Token) -> Result<Type, Error> {
+        match self.methods.get(&identifier.lexeme) {
+            Some(x) => Ok(Type::METHOD(x.clone())),
+            _ => {
+                crate::error("TypeError", &format!("{} has no attribute '{}'", self.name, identifier.lexeme.clone()), identifier.line);
+                Err(Error::STRING("TypeError".into()))
+            }
+        }
     }
 
     pub fn arity(&self) -> usize {
-        0
-        /*
         match self.methods.get("init") {
-            Some(f) => f.arity,
+            Some(f) => f.arity - 1,
             None => 0,
         }
-        */
     }
 }
 
@@ -312,7 +320,19 @@ impl Callable for Class {
         for (key, value) in &self.methods {
             fields.insert(key.clone(), Box::new(Type::METHOD(value.clone())));
         }
-        Ok(Type::OBJECT(Object::new(self.clone(), fields)))
+        let obj = Object::new(self.clone(), fields);
+        if self.methods.get("init").is_some() {
+            // insert "self" as argument
+            let mut args = args.clone();
+            args.insert(0, Type::OBJECT(obj.clone()));
+            // bind "self" to the method
+            let t = Token::new("init".to_string(), Type::NIL, TokenType::NIL, callee.line);
+            if let Type::METHOD(mut f) = obj.get(&t)? {
+                f.bind_self(obj, None);
+                return f.call(args, enclosing, callee);
+            }
+        }
+        Ok(Type::OBJECT(obj))
     }
 }
 
@@ -331,6 +351,9 @@ impl Object {
         match self.fields.get(&name.lexeme) {
             Some(x) => Ok((**x).clone()),
             None => {
+                if let Some(superclass) = &self.class.superclass {
+                    return superclass.get_method(name.clone());
+                }
                 crate::error("TypeError", &format!("{} has no attribute '{}'", self.class.name, name.lexeme), name.line);
                 Err(Error::STRING(format!("{} has no attribute '{}'", self.class.name, name)))
             }
@@ -534,6 +557,7 @@ impl Callable for NativeFunction {
 #[derive(Debug, Clone)]
 pub enum NativeClass {
     LIST,
+    DICT,
 }
 
 impl Callable for NativeClass {
@@ -541,7 +565,7 @@ impl Callable for NativeClass {
         match self {
             NativeClass::LIST => {
                 let list = Rc::new(RefCell::new(args.clone()));
-                let class = Class::new("list".to_string(), vec![].into());
+                let class = Class::new("list".to_string(), vec![].into(), None);
                 let mut fields: HashMap<String, Box<Type>> = HashMap::new();
                 fields.insert("index".to_string(), Box::new(Type::NATIVE(NativeFunction::INDEX(list.clone()))));
                 fields.insert("add".to_string(), Box::new(Type::NATIVE(NativeFunction::ADD(list.clone()))));
@@ -551,6 +575,15 @@ impl Callable for NativeClass {
                 let i = Rc::new(Cell::new(0usize));
                 fields.insert("next".to_string(), Box::new(Type::NATIVE(NativeFunction::NEXT(list.clone(), i.clone()))));
                 Ok(Type::OBJECT(Object::new(class, fields)))
+            },
+            NativeClass::DICT => {
+                if args.len() > 0 {
+                    crate::error("TypeError", &format!("`dict` takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+                let map: HashMap<Type, Type> = HashMap::new();
+                let dict = Rc::new(RefCell::new(map));
+                todo!();
             }
         }
     }

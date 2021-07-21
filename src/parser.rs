@@ -19,12 +19,13 @@ pub struct Parser {
     loop_counter: u32,
     function_counter: u32,
     class_counter: u32,
+    superclass: Vec<Option<Token>>,
 }
 
 impl Parser {
     // constructor
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0}
+        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0, superclass: vec![].into()}
     }
     /*** helper functions ***/
 
@@ -133,11 +134,24 @@ impl Parser {
         Ok(Box::new(AST::Import::new(module, None, alias)))
     }
 
-    // "class" identifier "{" function* "}"
+    // "class" identifier ("<" identifier)? "{" function* "}"
     fn class_declaration(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume "class" token
         self.class_counter += 1;
         let identifier = self.consume(TokenType::IDENTIFIER, "Expect identifier after class declaration")?;
+        let mut superclass: Option<Token> = None;
+        if self.check_type(&TokenType::LESS) {
+            self.advance();
+            let s = self.consume(TokenType::IDENTIFIER, "Expect superclass identifier after `<`")?;
+            if s.lexeme == identifier.lexeme {
+                crate::error("NameError", "cannot inherit from self", identifier.line);
+                return Err("NameError".to_string());
+            }
+            superclass = Some(s);
+            self.superclass.push(superclass.clone());
+        } else {
+            self.superclass.push(None);
+        }
         self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body")?;
 
         let mut methods: Vec<Function> = Vec::new();
@@ -146,7 +160,8 @@ impl Parser {
         }
         self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body")?;
         self.class_counter -= 1;
-        Ok(Box::new(AST::ClassDeclr::new(identifier, methods)))
+        self.superclass.pop();
+        Ok(Box::new(AST::ClassDeclr::new(identifier, superclass, methods)))
     }
 
     // "fun" identifier "(" args[] ")" block_stmt
@@ -417,7 +432,7 @@ impl Parser {
                 }
             } else if expr.get_type() == String::from("Index") {
                 self.current = ret_index;
-                match self.function_call() {
+                match self.primary() {
                     Ok(mut expr) => {
                         while self.check_type(&TokenType::BRA) {
                             let operator = self.advance();
@@ -563,7 +578,7 @@ impl Parser {
                 Err(right) => return Err(right),
             }
         }
-        match self.brackets() {
+        match self.function_call() {
             Err(e) => {
                 self.synchronize();
                 Err(e)
@@ -619,6 +634,18 @@ impl Parser {
                         self.advance(); // consume '.'
                         let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
                         expr = Box::new(AST::Get::new(name, expr));
+                    } else if self.check_type(&TokenType::BRA) { 
+                        while self.check_type(&TokenType::BRA) {
+                            let operator = self.advance();
+                            expr = match self.term() {
+                                Ok(index) => {
+                                    let ret = Box::new(AST::Index::new(expr, operator.clone(), index));
+                                    self.consume(TokenType::KET, "Expect ']'")?;
+                                    ret
+                                },
+                                Err(e) => return Err(e),
+                            };
+                        }
                     } else {
                         return Ok(expr);
                     }
@@ -642,10 +669,34 @@ impl Parser {
         // self
         if self.check_type(&TokenType::SELF) {
             if self.class_counter == 0 {
-                crate::error("SyntaxError", "'self' outside class declaration", self.peek().line);
-                return Err("'self' outside class declaration".into());
+                crate::error("SyntaxError", "`self` outside class declaration", self.peek().line);
+                return Err("`self` outside class declaration".into());
             }
             return Ok(Box::new(AST::Variable::new(self.advance())));
+        }
+
+        // super
+        if self.check_type(&TokenType::SUPER) {
+            if self.class_counter == 0 {
+                crate::error("SyntaxError", "`super` outside class declaration", self.peek().line);
+                return Err("`super` outside class declaration".into());
+            }
+            self.advance();
+            match self.superclass.last() {
+                Some(x) => {
+                    match x {
+                        Some(s) => return Ok(Box::new(AST::Super::new(s.clone()))),
+                        None => {
+                            crate::error("AttributeError", "illegal `super`", self.peek().line);
+                            return Err("illegal `super`".into());
+                        }
+                    }
+                },
+                None => {
+                    crate::error("AttributeError", "illegal `super`", self.peek().line);
+                    return Err("illegal `super`".into());
+                }
+            }
         }
 
         // braces

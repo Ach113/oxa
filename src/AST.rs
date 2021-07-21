@@ -472,6 +472,9 @@ impl Eval for Get {
                             _ => x.get(&self.name),
                         }
                     },
+                    Type::CLASS(x) => {
+                        x.get_method(self.name.clone())
+                    },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
                         Err(Error::STRING("type has no attributes".into()))
@@ -886,13 +889,14 @@ impl Eval for Return {
 // class declaration
 pub struct ClassDeclr {
     name: Token,
-    class: Class,
+    methods: Vec<Function>,
+    superclass: Option<Token>,
 }
 
 impl ClassDeclr {
-    pub fn new(name: Token, methods: Vec<Function>) -> Self {
-        let class = Class::new(name.lexeme.clone(), methods);
-        ClassDeclr {name: name.clone(), class}
+    pub fn new(name: Token, superclass: Option<Token>, methods: Vec<Function>) -> Self {
+        
+        ClassDeclr {name, superclass, methods}
     }
 }
 
@@ -902,8 +906,27 @@ impl Eval for ClassDeclr {
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        env.borrow_mut().add(self.name.clone(), Type::CLASS(self.class.clone()))?;
-        Ok(Type::NIL)
+        match &self.superclass {
+            Some(s) => {
+                let superclass = env.borrow().get(s.clone())?;
+                match superclass {
+                    Type::CLASS(x) => {
+                        let class = Class::new(self.name.lexeme.clone(), self.methods.clone(), Some(Box::new(x.clone())));
+                        env.borrow_mut().add(self.name.clone(), Type::CLASS(class.clone()))?;
+                        Ok(Type::NIL)
+                    },
+                    _ => {
+                        crate::error("TypeError", &format!("cannot inherit from `{}`", superclass.get_type()), self.name.line);
+                        Err(Error::STRING("TypeError".into()))
+                    }
+                } 
+            },
+            None => {
+                let class = Class::new(self.name.lexeme.clone(), self.methods.clone(), None);
+                env.borrow_mut().add(self.name.clone(), Type::CLASS(class.clone()))?;
+                Ok(Type::NIL)
+            }
+        }
     }
 }
 
@@ -931,7 +954,7 @@ impl Eval for Import {
             Ok(code) => {
                 // create class <module>
                 let methods: Vec<Function> = Vec::new();
-                let class = Class::new(String::from("__module__"), methods);
+                let class = Class::new(String::from("__module__"), methods, None);
                 let t = Token::new(String::from("__module__"), Type::NIL, TokenType::NIL, self.module.line);
                 env.borrow_mut().add(t, Type::CLASS(class.clone()))?;
                 // create new environment for the module and execute module code
@@ -1063,5 +1086,25 @@ impl Eval for IndexAssignment {
                 return Err(Error::STRING("TypeError".into()));
             }
         }
+    }
+}
+
+pub struct Super {
+    superclass: Token
+}
+
+impl Super {
+    pub fn new(superclass: Token) -> Self {
+        Super {superclass}
+    }
+}
+
+impl Eval for Super {
+    fn get_type(&self) -> String {
+        String::from("Super")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+       env.borrow().get(self.superclass.clone())
     }
 }
