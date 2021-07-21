@@ -388,6 +388,39 @@ impl Parser {
                         return Ok(Box::new(AST::Set::new(name, expr, rhs)));
                     },
                 }
+            } else if expr.get_type() == String::from("Index") {
+                self.current = ret_index;
+                match self.function_call() {
+                    Ok(mut expr) => {
+                        while self.check_type(&TokenType::BRA) {
+                            let operator = self.advance();
+                            expr = match self.term() {
+                                Ok(index) => {
+                                    if self.tokens[(self.current + 1) as usize].t == TokenType::EQUAL {
+                                        self.consume(TokenType::KET, "Expect ']'")?;
+                                        let equals = self.consume(TokenType::EQUAL, "Expect `=`")?;
+                                        match self.assignment() {
+                                            Err(e) => {
+                                                crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
+                                                return Err("invalid rhs for assignment".into());
+                                            },
+                                            Ok(rhs) => { 
+                                                return Ok(Box::new(AST::IndexAssignment::new(expr, index, equals, rhs)));
+                                            }
+                                        }
+                                    } else {
+                                        let ret = Box::new(AST::Index::new(expr, operator.clone(), index));
+                                        self.consume(TokenType::KET, "Expect ']'")?;
+                                        ret
+                                    }
+                                },
+                                Err(e) => return Err(e),
+                            };
+                        }
+                        Ok(expr)
+                    },
+                    Err(e) => Err(e),
+                }
             } else {
                 crate::error("SyntaxError", "invalid target variable for assignment", equals.line);
                 return Err("invalid target variable for assignment".into());

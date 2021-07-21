@@ -363,6 +363,7 @@ pub enum NativeFunction {
     ADD(Rc<RefCell<Vec<Type>>>),
     LEN(Rc<RefCell<Vec<Type>>>),
     REMOVE(Rc<RefCell<Vec<Type>>>),
+    SET(Rc<RefCell<Vec<Type>>>),
 }
 
 impl Callable for NativeFunction {
@@ -489,6 +490,28 @@ impl Callable for NativeFunction {
                     return Err(Error::STRING("function arity error".into()));
                 }
             },
+            NativeFunction::SET(list) => {
+                if args.len() == 2 {
+                    match &args[0] {
+                        Type::NUMERIC(x) => {
+                            let index = *x as usize;
+                            if list.borrow().len() <= index {
+                                crate::error("IndexError", "list index out of range", callee.line);
+                                return Err(Error::STRING("IndexError".into()));
+                            }
+                            list.borrow_mut()[index] = args[1].clone();
+                            return Ok(Type::NIL);
+                        },
+                        _ => {
+                            crate::error("TypeError", "invalid index type", callee.line);
+                            return Err(Error::STRING("TypeError".into()));
+                        }
+                    }
+                } else {
+                    crate::error("TypeError", &format!("`index` takes 2 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
         }
     }
 }
@@ -509,6 +532,7 @@ impl Callable for NativeClass {
                 fields.insert("add".to_string(), Box::new(Type::NATIVE(NativeFunction::ADD(list.clone()))));
                 fields.insert("len".to_string(), Box::new(Type::NATIVE(NativeFunction::LEN(list.clone()))));
                 fields.insert("remove".to_string(), Box::new(Type::NATIVE(NativeFunction::REMOVE(list.clone()))));
+                fields.insert("set".to_string(), Box::new(Type::NATIVE(NativeFunction::SET(list.clone()))));
                 Ok(Type::OBJECT(Object::new(class, fields)))
             }
         }

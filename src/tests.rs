@@ -147,4 +147,18 @@ mod tests {
           foo.method();foo.b.x".to_string(), env.clone())?);
         Ok(())
     }
+
+    #[test]
+    fn list_test() -> Result<(), String> {
+        let env = Rc::new(RefCell::new(Environment::new(None)));
+        assert_eq!(Type::NUMERIC(42.0), crate::run("var x = list(1, 2, 42); x[2] ".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(4.0), crate::run("var x = list(1, 2, 42); x.add(-1); x.len()".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(2.0), crate::run("var x = list(1, 2, 42); x.remove(2); x.len()".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(2.0), crate::run("var x = list(list(1, 2)); x[0][1]".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(-1.0), crate::run("var x = list(1, 2, 3); x[0] = -1; x[0]".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(-1.0), crate::run("var x = list(list(1, 2)); x[0][1] = -1; x[0][1]".to_string(), env.clone())?);
+        assert!(crate::run("var x = list(1, 2, 42); x[4] ".to_string(), env.clone()).is_err());
+        assert!(crate::run("var x = list(); x.remove(0) ".to_string(), env.clone()).is_err());
+        Ok(())
+    }
 }

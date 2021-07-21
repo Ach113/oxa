@@ -952,3 +952,45 @@ impl Eval for Index {
         }
     }
 }
+
+pub struct IndexAssignment {
+    lhs: Box<dyn Eval>,
+    rhs: Box<dyn Eval>,
+    index: Box<dyn Eval>,
+    equals: Token
+}
+
+impl IndexAssignment {
+    pub fn new(lhs: Box<dyn Eval>, index: Box<dyn Eval>, equals: Token, rhs: Box<dyn Eval>) -> Self {
+        IndexAssignment{lhs, rhs, index, equals}
+    }
+}
+
+impl Eval for IndexAssignment {
+    fn get_type(&self) -> String {
+        String::from("IndexAssignment")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+       let argv: Vec<Type> = vec![self.index.eval(env.clone())?, self.rhs.eval(env.clone())?];
+       let t = Token::new("set".to_string(), Type::NIL, TokenType::NIL, self.equals.line);
+       let iterable = self.lhs.eval(env.clone())?;
+       match iterable {
+            Type::OBJECT(obj) => {
+                match obj.get(&t)? {
+                    Type::NATIVE(f) => {
+                        return f.call(argv, env.clone(), self.equals.clone());
+                    },
+                    _ => {
+                        crate::error("TypeError", "unexpected lhs for operator `[]`", self.equals.line);
+                        return Err(Error::STRING("TypeError".into()));
+                    }
+                }
+            },
+            _ => {
+                crate::error("TypeError", &format!("type `{}` cannot be indexed", iterable.get_type()), self.equals.line);
+                return Err(Error::STRING("TypeError".into()));
+            }
+        }
+    }
+}
