@@ -280,6 +280,16 @@ impl Class {
         Class {name, methods: map, superclass}
     }
 
+    pub fn get_method(&self, identifier: Token) -> Result<Type, Error> {
+        match self.methods.get(&identifier.lexeme) {
+            Some(x) => Ok(Type::METHOD(x.clone())),
+            _ => {
+                crate::error("TypeError", &format!("{} has no attribute '{}'", self.name, identifier.lexeme.clone()), identifier.line);
+                Err(Error::STRING("TypeError".into()))
+            }
+        }
+    }
+
     pub fn arity(&self) -> usize {
         match self.methods.get("init") {
             Some(f) => f.arity - 1,
@@ -341,6 +351,9 @@ impl Object {
         match self.fields.get(&name.lexeme) {
             Some(x) => Ok((**x).clone()),
             None => {
+                if let Some(superclass) = &self.class.superclass {
+                    return superclass.get_method(name.clone());
+                }
                 crate::error("TypeError", &format!("{} has no attribute '{}'", self.class.name, name.lexeme), name.line);
                 Err(Error::STRING(format!("{} has no attribute '{}'", self.class.name, name)))
             }

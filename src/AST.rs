@@ -472,6 +472,9 @@ impl Eval for Get {
                             _ => x.get(&self.name),
                         }
                     },
+                    Type::CLASS(x) => {
+                        x.get_method(self.name.clone())
+                    },
                     _ => {
                         crate::error("TypeError", &format!("type '{}' does not have attributes", obj.get_type()), self.name.line);
                         Err(Error::STRING("type has no attributes".into()))
@@ -1083,5 +1086,25 @@ impl Eval for IndexAssignment {
                 return Err(Error::STRING("TypeError".into()));
             }
         }
+    }
+}
+
+pub struct Super {
+    superclass: Token
+}
+
+impl Super {
+    pub fn new(superclass: Token) -> Self {
+        Super {superclass}
+    }
+}
+
+impl Eval for Super {
+    fn get_type(&self) -> String {
+        String::from("Super")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+       env.borrow().get(self.superclass.clone())
     }
 }

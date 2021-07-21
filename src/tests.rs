@@ -212,4 +212,55 @@ mod tests {
         assert!(crate::run("var x = list(); x.remove(0) ".to_string(), env.clone()).is_err());
         Ok(())
     }
+
+    #[test]
+    fn inheritance_test() -> Result<(), String> {
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      assert_eq!(Type::NUMERIC(100.0), crate::run("class A {
+        fun method() {
+          return 100;
+        }
+      }
+      class B < A {
+        fun method() {
+          return 10;
+        }
+        fun test(self) {
+          super.method();
+        }
+      }
+      class C < B {}
+      C().test()".to_string(), env.clone())?);
+      assert_eq!(Type::NUMERIC(10.0), crate::run("class A {
+        fun method(self) {
+          return 100;
+        }
+      }
+      class B < A {
+        fun method(self) {
+          return 10;
+        }
+      }B().method()".to_string(), env.clone())?);
+      assert_eq!(Type::NUMERIC(100.0), crate::run("class A {
+        fun method(self) {
+          return 100;
+        }
+      }
+      class B < A {
+        fun method(self) {
+          return super.method(self);
+        }
+      }B().method()".to_string(), env.clone())?);
+      assert!(crate::run("class B {
+        fun method(self) {
+          return super.method(self);
+        }
+      }".to_string(), env.clone()).is_err());
+      assert!(crate::run("class B < D {
+        fun method(self) {
+          return super.method(self);
+        }
+      }".to_string(), env.clone()).is_err());
+      Ok(())
+  }
 }

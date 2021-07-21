@@ -19,12 +19,13 @@ pub struct Parser {
     loop_counter: u32,
     function_counter: u32,
     class_counter: u32,
+    superclass: Vec<Option<Token>>,
 }
 
 impl Parser {
     // constructor
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0}
+        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0, superclass: vec![].into()}
     }
     /*** helper functions ***/
 
@@ -147,6 +148,9 @@ impl Parser {
                 return Err("NameError".to_string());
             }
             superclass = Some(s);
+            self.superclass.push(superclass.clone());
+        } else {
+            self.superclass.push(None);
         }
         self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body")?;
 
@@ -156,6 +160,7 @@ impl Parser {
         }
         self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body")?;
         self.class_counter -= 1;
+        self.superclass.pop();
         Ok(Box::new(AST::ClassDeclr::new(identifier, superclass, methods)))
     }
 
@@ -664,10 +669,34 @@ impl Parser {
         // self
         if self.check_type(&TokenType::SELF) {
             if self.class_counter == 0 {
-                crate::error("SyntaxError", "'self' outside class declaration", self.peek().line);
-                return Err("'self' outside class declaration".into());
+                crate::error("SyntaxError", "`self` outside class declaration", self.peek().line);
+                return Err("`self` outside class declaration".into());
             }
             return Ok(Box::new(AST::Variable::new(self.advance())));
+        }
+
+        // super
+        if self.check_type(&TokenType::SUPER) {
+            if self.class_counter == 0 {
+                crate::error("SyntaxError", "`super` outside class declaration", self.peek().line);
+                return Err("`super` outside class declaration".into());
+            }
+            self.advance();
+            match self.superclass.last() {
+                Some(x) => {
+                    match x {
+                        Some(s) => return Ok(Box::new(AST::Super::new(s.clone()))),
+                        None => {
+                            crate::error("AttributeError", "illegal `super`", self.peek().line);
+                            return Err("illegal `super`".into());
+                        }
+                    }
+                },
+                None => {
+                    crate::error("AttributeError", "illegal `super`", self.peek().line);
+                    return Err("illegal `super`".into());
+                }
+            }
         }
 
         // braces
