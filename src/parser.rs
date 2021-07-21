@@ -207,6 +207,7 @@ impl Parser {
             TokenType::PRINT => self.print_statement(),
             TokenType::RETURN => self.return_statement(),
             TokenType::WHILE => self.while_loop(),
+            TokenType::FOR => self.for_loop(),
             TokenType::LEFT_BRACE => {
                 match self.block_statement() {
                     Ok(block) => Ok(Box::new(block)),
@@ -217,7 +218,33 @@ impl Parser {
         }
     }
 
-    // "while" expression "{" statement "}"
+    // "for" identifier "in" expression "{" statement* "}"
+    fn for_loop(&mut self) -> Result<Box<dyn Eval>, String> {
+        self.advance(); // consume "for"
+        let alias = self.consume(TokenType::IDENTIFIER, "Expect identifier after `for`")?;
+        self.consume(TokenType::IN, "Expect `in` after `for` statement")?;
+        let iterable = self.brackets()?;
+        // loop body
+        self.loop_counter += 1;
+        let mut stmt: Option<AST::BlockStmt> = None;
+        if self.check_type(&TokenType::LEFT_BRACE) {
+            match self.block_statement() {
+                Ok(x) => stmt = Some(x),
+                Err(e) => {
+                    self.synchronize();
+                    return Err(e);
+                }
+            }
+        } else {
+            crate::error("SyntaxError", "Expected '{' after 'for' statement", self.previous().line);
+            self.synchronize();
+            return Err("Expected '{' after 'for' statement".into());
+        }
+        self.loop_counter -= 1;
+        Ok(Box::new(AST::ForLoop::new(alias, iterable, stmt.unwrap())))
+    }
+
+    // "while" expression "{" statement* "}"
     fn while_loop(&mut self) -> Result<Box<dyn Eval>, String> {
         self.advance(); // consume "while" token
         // condition

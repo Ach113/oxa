@@ -50,6 +50,7 @@ impl Scanner {
             "class" => Token::new(identifier.to_string(), Type::NIL, TokenType::CLASS, self.line),
             "fun" => Token::new(identifier.to_string(), Type::NIL, TokenType::FUN, self.line),
             "for" => Token::new(identifier.to_string(), Type::NIL, TokenType::FOR, self.line),
+            "in" => Token::new(identifier.to_string(), Type::NIL, TokenType::IN, self.line),
             "if" => Token::new(identifier.to_string(), Type::NIL, TokenType::IF, self.line),
             "else" => Token::new(identifier.to_string(), Type::NIL, TokenType::ELSE, self.line),
             "return" => Token::new(identifier.to_string(), Type::NIL, TokenType::RETURN, self.line),

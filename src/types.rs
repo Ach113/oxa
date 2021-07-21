@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use core::ops::{Add, Sub, Mul, Div, BitOr, BitAnd, BitXor, Rem};
 use std::cmp::Ordering;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{RefCell, Cell};
 use std::collections::HashMap;
 use std::io::prelude::*;
 
@@ -364,6 +364,7 @@ pub enum NativeFunction {
     LEN(Rc<RefCell<Vec<Type>>>),
     REMOVE(Rc<RefCell<Vec<Type>>>),
     SET(Rc<RefCell<Vec<Type>>>),
+    NEXT(Rc<RefCell<Vec<Type>>>, Rc<Cell<usize>>),
 }
 
 impl Callable for NativeFunction {
@@ -512,6 +513,20 @@ impl Callable for NativeFunction {
                     return Err(Error::STRING("function arity error".into()));
                 }
             },
+            NativeFunction::NEXT(list, i) => {
+                if args.len() == 0 {
+                    let index = i.get();
+                    if index == list.borrow().len() {
+                        i.set(0);
+                        return Err(Error::STOPITERATION);
+                    }
+                    i.set(index + 1);
+                    return Ok(list.borrow()[index].clone());
+                } else {
+                    crate::error("TypeError", &format!("`next` takes 0 positional arguments, {} were provided", args.len()), callee.line);
+                    return Err(Error::STRING("function arity error".into()));
+                }
+            },
         }
     }
 }
@@ -533,6 +548,8 @@ impl Callable for NativeClass {
                 fields.insert("len".to_string(), Box::new(Type::NATIVE(NativeFunction::LEN(list.clone()))));
                 fields.insert("remove".to_string(), Box::new(Type::NATIVE(NativeFunction::REMOVE(list.clone()))));
                 fields.insert("set".to_string(), Box::new(Type::NATIVE(NativeFunction::SET(list.clone()))));
+                let i = Rc::new(Cell::new(0usize));
+                fields.insert("next".to_string(), Box::new(Type::NATIVE(NativeFunction::NEXT(list.clone(), i.clone()))));
                 Ok(Type::OBJECT(Object::new(class, fields)))
             }
         }

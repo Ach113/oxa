@@ -61,6 +61,32 @@ mod tests {
         assert!(crate::run("var i = 0; while i < 10 i = i + 1; i".to_string(), env.clone()).is_err()); // expect '{}' after 'while' cond
         assert!(crate::run("break;".to_string(), env.clone()).is_err()); // break outside loop
         assert!(crate::run("continue;".to_string(), env.clone()).is_err()); // continue outside loop
+        // for loops
+        assert_eq!(Type::NUMERIC(143.0), crate::run("fun fib(x) {
+          if x == 1 or x == 0 {
+            return x;
+          }
+          return fib(x - 1) + fib(x - 2);
+        }
+        var sum = 0;
+        for i in list(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10){
+          sum = sum + fib(i);
+        }
+        sum".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(10.0), crate::run("var sum = 0;
+        for i in list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10){
+            if i == 5 {
+            break;
+          }
+          sum = sum + i;
+        }sum".to_string(), env.clone())?);
+        assert_eq!(Type::NUMERIC(21.0), crate::run("var sum = 0;
+        for i in list(list(1, 2, 3), list(4, 5, 6)){
+            for j in i {
+            sum = sum + j;
+          }
+        }sum".to_string(), env.clone())?);
+        assert!(crate::run("var x = 15; for i in x {}".to_string(), env.clone()).is_err()); // not iterable
         Ok(())
     }
 

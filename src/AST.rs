@@ -15,6 +15,7 @@ pub enum Error {
     BREAK,
     CONTINUE,
     RETURN(Type),
+    STOPITERATION
 }
 
 impl fmt::Display for Error {
@@ -24,6 +25,7 @@ impl fmt::Display for Error {
             Error::BREAK => write!(f, "continue"),
             Error::CONTINUE => write!(f, "break"),
             Error::RETURN(x) => write!(f, "return {}", x),
+            Error::STOPITERATION => write!(f, "stopiteration"),
         }
     }
 }
@@ -253,7 +255,6 @@ impl Eval for Assignment {
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         let value = self.value.eval(env.clone())?; 
-        println!("{}", self.identifier.clone());
         env.borrow_mut().assign(self.identifier.clone(), value.clone())
     }
 }
@@ -505,7 +506,7 @@ impl Eval for Set {
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         match self.object.eval(env.clone()) {
-            Ok(mut obj) => {
+            Ok(obj) => {
                 match obj {
                     Type::OBJECT(mut x) => {
                         let value = self.value.eval(env.clone())?;
@@ -715,6 +716,76 @@ impl Eval for WhileLoop {
                             _ => return Err(e),
                         }
                     },
+                }
+            }
+        }
+        Ok(Type::NIL)
+    }
+}
+
+// for loop
+pub struct ForLoop {
+    alias: Token,
+    iterable: Box<dyn Eval>,
+    body: BlockStmt
+}
+
+impl ForLoop {
+    pub fn new(alias: Token, iterable: Box<dyn Eval>, body: BlockStmt) -> Self {
+        ForLoop {alias, iterable, body}
+    }
+}
+
+impl Eval for ForLoop {
+    fn get_type(&self) -> String {
+        String::from("ForLoop")
+    }
+
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+        let mut ret: Result<Type, Error> = Ok(Type::NIL);
+        // environment for the for loop
+        let enclosing = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
+        // `next()` function
+        let t = Token::new("next".to_string(), Type::NIL, TokenType::NIL, self.alias.line);
+        // iterate over `iterable`
+        let iterable = self.iterable.eval(env.clone())?;
+        let iter = match iterable {
+            Type::OBJECT(obj) => {
+                obj
+            },
+            _ => {
+                crate::error("TypeError", &format!("type `{}` does not implement `iter()`", iterable.get_type()), self.alias.line);
+                return Err(Error::STRING("TypeError".into()));
+            }
+        };
+        // loop body
+        loop {
+            if let Type::NATIVE(f) = iter.get(&t)? {
+                let argv: Vec<Type> = vec![];
+                let alias_value = f.call(argv, env.clone(), self.alias.clone());
+                match alias_value {
+                    Err(e) => {
+                        if let Error::STOPITERATION = e {
+                            break;
+                        } 
+                    },
+                    Ok(value) => {
+                        // add alias with its value inside to env
+                        enclosing.borrow_mut().add(self.alias.clone(), value);
+                        for stmt in &self.body.statements {
+                            ret = stmt.eval(enclosing.clone());
+                            match ret {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    match e {
+                                        Error::BREAK => return Ok(Type::NIL),
+                                        Error::CONTINUE => break,
+                                        _ => return Err(e),
+                                    }
+                                },
+                            }
+                        }
+                    }
                 }
             }
         }
