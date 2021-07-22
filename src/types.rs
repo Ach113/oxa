@@ -241,7 +241,7 @@ impl Callable for Function {
         // insert function arguments into function scope
         for (identifier, value) in self.args.iter().zip(args.iter()) {
             let t = Token::new(identifier.clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
-            enclosing.borrow_mut().add(t, value.clone());
+            enclosing.borrow_mut().add(t, value.clone())?;
         }
         
         let res = match interpret(&(self.body.borrow().statements), enclosing.clone()) {
@@ -257,7 +257,7 @@ impl Callable for Function {
             let t = Token::new(self.args[0].clone(), Type::NIL, TokenType::IDENTIFIER, self.address);
             let value = enclosing.borrow().get(t)?;
             let id = Token::new(id.to_string(), Type::NIL, TokenType::IDENTIFIER, self.address);
-            enclosing.borrow_mut().enclosing.as_ref().unwrap().borrow_mut().assign(id, value);
+            enclosing.borrow_mut().enclosing.as_ref().unwrap().borrow_mut().assign(id, value)?;
         }
         res
     }
@@ -391,7 +391,7 @@ pub enum NativeFunction {
 }
 
 impl Callable for NativeFunction {
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, args: Vec<Type>, _env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
         match self {
             NativeFunction::INPUT => {
                 if args.len() != 0 {
@@ -404,7 +404,6 @@ impl Callable for NativeFunction {
                     Ok(x) => return Ok(Type::NUMERIC(x)),
                     Err(_) => return Ok(Type::STRING(input.trim().to_string())),
                 }
-                Ok(Type::NIL)
             },
             NativeFunction::READ => {
                 if args.len() == 1 {
@@ -557,11 +556,11 @@ impl Callable for NativeFunction {
 #[derive(Debug, Clone)]
 pub enum NativeClass {
     LIST,
-    DICT,
+    //DICT,
 }
 
 impl Callable for NativeClass {
-    fn call(&self, args: Vec<Type>, env: Rc<RefCell<Environment>>, callee: Token) -> Result<Type, Error> {
+    fn call(&self, args: Vec<Type>, _env: Rc<RefCell<Environment>>, _callee: Token) -> Result<Type, Error> {
         match self {
             NativeClass::LIST => {
                 let list = Rc::new(RefCell::new(args.clone()));
@@ -576,6 +575,7 @@ impl Callable for NativeClass {
                 fields.insert("next".to_string(), Box::new(Type::NATIVE(NativeFunction::NEXT(list.clone(), i.clone()))));
                 Ok(Type::OBJECT(Object::new(class, fields)))
             },
+            /*
             NativeClass::DICT => {
                 if args.len() > 0 {
                     crate::error("TypeError", &format!("`dict` takes 0 positional arguments, {} were provided", args.len()), callee.line);
@@ -585,6 +585,7 @@ impl Callable for NativeClass {
                 let dict = Rc::new(RefCell::new(map));
                 todo!();
             }
+            */
         }
     }
 }

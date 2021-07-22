@@ -223,7 +223,7 @@ impl Eval for Literal {
         String::from("Literal")
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+    fn eval(&self, _env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         Ok(self.value.clone())
     }
 }
@@ -513,7 +513,7 @@ impl Eval for Set {
                 match obj {
                     Type::OBJECT(mut x) => {
                         let value = self.value.eval(env.clone())?;
-                        env.borrow_mut().assign(self.object_id.clone(), x.set(self.name.lexeme.clone(), value.clone())?);
+                        env.borrow_mut().assign(self.object_id.clone(), x.set(self.name.lexeme.clone(), value.clone())?)?;
                         Ok(value)
                     },
                     _ => {
@@ -523,30 +523,6 @@ impl Eval for Set {
                 }
             },
             Err(e) => return Err(e),
-        }
-    }
-}
-
-/* self */
-pub struct Self_ {
-    identifier: Token
-}
-
-impl Self_ {
-    pub fn new(identifier: Token) -> Self {
-        Self_{identifier}
-    }
-}
-
-impl Eval for Self_ {
-    fn get_type(&self) -> String {
-        format!("Variable: {}", self.identifier.lexeme)
-    }
-
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        match &env.borrow().enclosing {
-            Some(env) => env.borrow().get(self.identifier.clone()),
-            None => Err(Error::STRING("'self' outside of class body".to_string())),
         }
     }
 }
@@ -704,7 +680,7 @@ impl Eval for WhileLoop {
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        let mut ret: Result<Type, Error> = Ok(Type::NIL);
+        let mut ret: Result<Type, Error>;
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
 
         while self.condition.eval(env.clone())? == Type::BOOL(true) {
@@ -745,7 +721,7 @@ impl Eval for ForLoop {
     }
 
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
-        let mut ret: Result<Type, Error> = Ok(Type::NIL);
+        let mut ret: Result<Type, Error>;
         // environment for the for loop
         let enclosing = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
         // `next()` function
@@ -774,7 +750,7 @@ impl Eval for ForLoop {
                     },
                     Ok(value) => {
                         // add alias with its value inside to env
-                        enclosing.borrow_mut().add(self.alias.clone(), value);
+                        enclosing.borrow_mut().add(self.alias.clone(), value)?;
                         for stmt in &self.body.statements {
                             ret = stmt.eval(enclosing.clone());
                             match ret {
@@ -812,7 +788,7 @@ impl Eval for Break {
         String::from("BreakStmt")
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+    fn eval(&self, _env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         Err(Error::BREAK)
     }
 }
@@ -833,7 +809,7 @@ impl Eval for Continue {
         String::from("ContinueStmt")
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
+    fn eval(&self, _env: Rc<RefCell<Environment>>) -> Result<Type, Error> {
         Err(Error::CONTINUE)
     }
 }
@@ -975,11 +951,11 @@ impl Eval for Import {
                         let object = Type::OBJECT(Object::new(class, fields));
                         match &self.alias {
                             Some(t) => {
-                                env.borrow_mut().add(t.clone(), object);
+                                env.borrow_mut().add(t.clone(), object)?;
                             },
                             _ => {
                                 let t = Token::new(self.module.lexeme.clone(), Type::NIL, TokenType::NIL, self.module.line);
-                                env.borrow_mut().add(t, object);
+                                env.borrow_mut().add(t, object)?;
                             }
                         }
                     },
@@ -987,11 +963,11 @@ impl Eval for Import {
                         match &self.alias {
                             Some(a) => {
                                 let value = module_env.borrow().get(t.clone())?;
-                                env.borrow_mut().add(a.clone(), value);
+                                env.borrow_mut().add(a.clone(), value)?;
                             },
                             None => {
                                 let value = module_env.borrow().get(t.clone())?;
-                                env.borrow_mut().add(t.clone(), value);
+                                env.borrow_mut().add(t.clone(), value)?;
                             }
                         }
                     }
