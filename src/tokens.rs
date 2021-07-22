@@ -60,8 +60,6 @@ pub enum TokenType {
     IMPORT,
     AS,
     FROM,
-
-    EOF
 }
 
 #[derive(Debug, Clone)]

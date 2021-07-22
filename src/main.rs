@@ -7,6 +7,7 @@ use std::cell::RefCell;
 mod types;
 mod tokens;
 mod scanner;
+#[allow(non_snake_case)]
 mod AST;
 mod parser;
 mod environment;
@@ -65,7 +66,7 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
         print!(">> ");
         std::io::stdout().flush()?; // necessary due to line-buffering of stdout
         let mut instruction = String::new();
-        std::io::stdin().read_line(&mut instruction);
+        std::io::stdin().read_line(&mut instruction)?;
         if !instruction.trim().is_empty() {
             match run(instruction, env.clone()) {
                 Err(_) => return Err("".into()),
@@ -78,7 +79,6 @@ fn repl() -> Result<(), Box<dyn std::error::Error>> {
             }; 
         }
     }
-    Ok(())
 }
 
 fn main() -> Result<(), String> {
@@ -88,9 +88,11 @@ fn main() -> Result<(), String> {
         // error code according to https://www.freebsd.org/cgi/man.cgi?query=sysexits&apropos=0&sektion=0&manpath=FreeBSD+4.3-RELEASE&format=html
         std::process::exit(64); 
     } else if args.len() == 2 {
-        runfile(&args[1])?;
+        runfile(&args[1])
     } else {
-        repl();
+        match repl() {
+            Ok(_) => Ok(()),
+            _ => Err("FileIOError".to_string()),
+        }
     }
-    Ok(())
 }

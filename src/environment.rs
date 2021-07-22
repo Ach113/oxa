@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::fmt;
 
 use crate::tokens::Token;
 use crate::types::{Type, NativeFunction, NativeClass};
@@ -13,7 +12,7 @@ fn add_natives(env: &mut Environment) {
     env.symbol_table.insert("write".to_string(), Type::NATIVE(NativeFunction::WRITE));
     env.symbol_table.insert("time".to_string(), Type::NATIVE(NativeFunction::TIME));
     env.symbol_table.insert("list".to_string(), Type::NATIVEC(NativeClass::LIST));
-    env.symbol_table.insert("dict".to_string(), Type::NATIVEC(NativeClass::DICT));
+    //env.symbol_table.insert("dict".to_string(), Type::NATIVEC(NativeClass::DICT));
 }
 
 #[derive(Debug)]
@@ -67,12 +66,6 @@ impl Environment {
                     }
                 }
             }
-        }
-    }
-
-    pub fn rename(&mut self, old: String, new: String) {
-        if let Some(value) = self.symbol_table.remove(&old) {
-            self.symbol_table.insert(new, value);
         }
     }
 }

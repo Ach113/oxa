@@ -3,9 +3,6 @@ use crate::AST;
 use crate::AST::Eval;
 use crate::types::{Type, Function};
 
-use std::rc::Rc;
-use std::cell::RefCell;
-
 // operators supported by each type of expression
 const EQUALITIES: [TokenType; 2] = [TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL];
 const COMPARISONS: [TokenType; 4] = [TokenType::GREATER, TokenType::GREATER_EQUAL, TokenType::LESS, TokenType::LESS_EQUAL];
@@ -25,7 +22,7 @@ pub struct Parser {
 impl Parser {
     // constructor
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0, superclass: vec![].into()}
+        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0, superclass: vec![]}
     }
     /*** helper functions ***/
 
@@ -41,15 +38,6 @@ impl Parser {
 
     fn previous(&self) -> Token {
         self.tokens[(self.current - 1) as usize].clone()
-    }
-
-    // checks if passed tokentype matches next token
-    fn next(&self, t: TokenType) -> bool {
-        if (self.current as usize) >= self.tokens.len() - 1 {
-            false
-        } else {
-            self.tokens[(self.current + 1) as usize].t == t
-        }
     }
 
     // returns current token, increments index
@@ -210,10 +198,8 @@ impl Parser {
             }
         }
         // check for semicolon
-        match self.consume(TokenType::SEMICOLON, "Expect ';' after expression") {
-            Ok(res) => Ok(Box::new(AST::VarDeclaration::new(identifier, value))),
-            Err(e) => Err(e),
-        }
+        self.consume(TokenType::SEMICOLON, "Expect ';' after expression")?;
+        Ok(Box::new(AST::VarDeclaration::new(identifier, value)))
     }
 
     fn statement(&mut self) -> Result<Box<dyn Eval>, String> {
@@ -241,10 +227,10 @@ impl Parser {
         let iterable = self.brackets()?;
         // loop body
         self.loop_counter += 1;
-        let mut stmt: Option<AST::BlockStmt> = None;
+        let stmt: AST::BlockStmt;
         if self.check_type(&TokenType::LEFT_BRACE) {
             match self.block_statement() {
-                Ok(x) => stmt = Some(x),
+                Ok(x) => stmt = x,
                 Err(e) => {
                     self.synchronize();
                     return Err(e);
@@ -256,7 +242,7 @@ impl Parser {
             return Err("Expected '{' after 'for' statement".into());
         }
         self.loop_counter -= 1;
-        Ok(Box::new(AST::ForLoop::new(alias, iterable, stmt.unwrap())))
+        Ok(Box::new(AST::ForLoop::new(alias, iterable, stmt)))
     }
 
     // "while" expression "{" statement* "}"
@@ -266,10 +252,10 @@ impl Parser {
         let cond = self.expression();
         // loop body
         self.loop_counter += 1;
-        let mut stmt: Option<AST::BlockStmt> = None;
+        let stmt: AST::BlockStmt;
         if self.check_type(&TokenType::LEFT_BRACE) {
             match self.block_statement() {
-                Ok(x) => stmt = Some(x),
+                Ok(x) => stmt = x,
                 Err(e) => {
                     self.synchronize();
                     return Err(e);
@@ -282,7 +268,7 @@ impl Parser {
         }
         self.loop_counter -= 1;
         match cond {
-            Ok(x) => Ok(Box::new(AST::WhileLoop::new(x, stmt.unwrap()))),
+            Ok(x) => Ok(Box::new(AST::WhileLoop::new(x, stmt))),
             _ => {
                 crate::error("SyntaxError", "Invalid condition for while loop", self.peek().line);
                 self.synchronize();
@@ -297,10 +283,10 @@ impl Parser {
         // condition
         let cond = self.expression();
         // statement if true
-        let mut stmt: Option<Box<dyn Eval>> = None;
+        let stmt: Box<dyn Eval>;
         if self.check_type(&TokenType::LEFT_BRACE) {
             match self.statement() {
-                Ok(x) => stmt = Some(x),
+                Ok(x) => stmt = x,
                 _ => {
                     return Err("invalid statement in 'if' block".into());
                 }
@@ -326,11 +312,11 @@ impl Parser {
             }
         }
         // error check
-        if cond.is_err() || stmt.is_none() {
+        if cond.is_err() {
             crate::error("ParserError", "invalid if statement", self.peek().line);
             return Err("invalid if statement".into());
         }
-        Ok(Box::new(AST::IfStmt::new(cond.unwrap(), stmt.unwrap(), else_stmt)))
+        Ok(Box::new(AST::IfStmt::new(cond.unwrap(), stmt, else_stmt)))
     }
 
     // { declaration* }
@@ -407,7 +393,7 @@ impl Parser {
 
             if expr.get_type().contains("Variable") {
                 match self.assignment() {
-                    Err(e) => {
+                    Err(_) => {
                         crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
                         return Err("invalid rhs for assignment".into());
                     },
@@ -422,7 +408,7 @@ impl Parser {
                 let name = self.consume(TokenType::IDENTIFIER, "Expect identifier after '.'")?;
                 self.advance(); // consume '='
                 match self.assignment() {
-                    Err(e) => {
+                    Err(_) => {
                         crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
                         return Err("invalid rhs for assignment".into());
                     },
@@ -442,7 +428,7 @@ impl Parser {
                                         self.consume(TokenType::KET, "Expect ']'")?;
                                         let equals = self.consume(TokenType::EQUAL, "Expect `=`")?;
                                         match self.assignment() {
-                                            Err(e) => {
+                                            Err(_) => {
                                                 crate::error("SyntaxError", "invalid rhs for assignment", equals.line);
                                                 return Err("invalid rhs for assignment".into());
                                             },
@@ -650,7 +636,6 @@ impl Parser {
                         return Ok(expr);
                     }
                 }
-                Ok(expr)
             },
             Err(e) => Err(e),
         }
