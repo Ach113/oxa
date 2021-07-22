@@ -564,7 +564,7 @@ impl Callable for NativeClass {
         match self {
             NativeClass::LIST => {
                 let list = Rc::new(RefCell::new(args.clone()));
-                let class = Class::new("list".to_string(), vec![].into(), None);
+                let class = Class::new("list".to_string(), vec![], None);
                 let mut fields: HashMap<String, Box<Type>> = HashMap::new();
                 fields.insert("index".to_string(), Box::new(Type::NATIVE(NativeFunction::INDEX(list.clone()))));
                 fields.insert("add".to_string(), Box::new(Type::NATIVE(NativeFunction::ADD(list.clone()))));

@@ -22,7 +22,7 @@ pub struct Parser {
 impl Parser {
     // constructor
     pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0, superclass: vec![].into()}
+        Parser {tokens: tokens, current: 0, loop_counter: 0, function_counter: 0, class_counter: 0, superclass: vec![]}
     }
     /*** helper functions ***/
 
